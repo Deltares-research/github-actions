@@ -83,9 +83,6 @@ runs:
       run: |
         echo "Setting up Deltares LaTeX styles..."
         cd "$LATEX_DIR"
-        
-        # Ensure source directory exists
-        mkdir -p source
 
         # Checkout SVN repository
         if ! svn checkout --username "$SVN_USERNAME" --password "$SVN_PASSWORD" --non-interactive --trust-server-cert "$SVN_REPO_URL" temp_svn; then
@@ -96,15 +93,16 @@ runs:
         # Copy Deltares styles
         echo "Copying LaTeX styles..."
         if [ -d "temp_svn/templates/latex/tex/latex/deltares" ]; then
-          cp -r temp_svn/templates/latex/tex/latex/deltares/* source/ || echo "::warning::Failed to copy deltares styles"
+          cp -r temp_svn/templates/latex/tex/latex/deltares/* . || echo "::warning::Failed to copy deltares styles"
         fi
 
         if [ -d "temp_svn/templates/latex/tex/latex/nomentbl/deltares" ]; then
-          cp -r temp_svn/templates/latex/tex/latex/nomentbl/deltares/* source/ || echo "::warning::Failed to copy nomentbl styles"
+          cp -r temp_svn/templates/latex/tex/latex/nomentbl/deltares/* . || echo "::warning::Failed to copy nomentbl
+           styles"
         fi
 
         if [ -d "temp_svn/templates/latex/bibtex/bst/deltares" ]; then
-          cp -r temp_svn/templates/latex/bibtex/bst/deltares/* source/ || echo "::warning::Failed to copy bibtex styles"
+          cp -r temp_svn/templates/latex/bibtex/bst/deltares/* . || echo "::warning::Failed to copy bibtex styles"
         fi
 
         # Cleanup
