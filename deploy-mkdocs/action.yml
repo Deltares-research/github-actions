@@ -1,0 +1,102 @@
+name: 'Deploy MkDocs to GitHub Pages'
+description: 'Deploy MkDocs documentation to GitHub Pages using mike for versioning'
+
+inputs:
+  package-manager:
+    description: 'Package manager used (uv, poetry, pixi)'
+    required: false
+    default: 'uv'
+  deploy-token:
+    description: 'GitHub token for deployment'
+    required: true
+  deploy-type:
+    description: 'Type of deployment (pr, main, release)'
+    required: true
+  release-tag:
+    description: 'Release tag for version deployment'
+    required: false
+    default: ''
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Configure git
+      shell: bash
+      run: |
+        git config --global user.name '${{ github.actor }}'
+        git config --global user.email '${{ github.actor }}@users.noreply.github.com'
+
+    - name: Deploy to GitHub Pages (Pull Request)
+      if: inputs.deploy-type == 'pr'
+      shell: bash
+      env:
+        ACTIONS_DEPLOY_TOKEN: ${{ inputs.deploy-token }}
+      run: |
+        echo "Deploying PR documentation..."
+        case "${{ inputs.package-manager }}" in
+          "uv")
+            uv run mike deploy --push develop
+            ;;
+          "poetry")
+            poetry run mike deploy --push develop
+            ;;
+          "pixi")
+            pixi run mike deploy --push develop
+            ;;
+          *)
+            mike deploy --push develop
+            ;;
+        esac
+
+    - name: Deploy to GitHub Pages (Main)
+      if: inputs.deploy-type == 'main'
+      shell: bash
+      env:
+        ACTIONS_DEPLOY_TOKEN: ${{ inputs.deploy-token }}
+      run: |
+        echo "Deploying main branch documentation..."
+        case "${{ inputs.package-manager }}" in
+          "uv")
+            uv run mike deploy --push main
+            uv run mike set-default --push main
+            ;;
+          "poetry")
+            poetry run mike deploy --push main
+            poetry run mike set-default --push main
+            ;;
+          "pixi")
+            pixi run mike deploy --push main
+            pixi run mike set-default --push main
+            ;;
+          *)
+            mike deploy --push main
+            mike set-default --push main
+            ;;
+        esac
+
+    - name: Deploy to GitHub Pages (Release)
+      if: inputs.deploy-type == 'release'
+      shell: bash
+      env:
+        ACTIONS_DEPLOY_TOKEN: ${{ inputs.deploy-token }}
+        RELEASE_TAG_VERSION: ${{ inputs.release-tag }}
+      run: |
+        echo "Deploying release documentation for tag: ${RELEASE_TAG_VERSION}"
+        case "${{ inputs.package-manager }}" in
+          "uv")
+            uv run mike deploy --push --update-aliases ${RELEASE_TAG_VERSION} latest
+            uv run mike set-default --push latest
+            ;;
+          "poetry")
+            poetry run mike deploy --push --update-aliases ${RELEASE_TAG_VERSION} latest
+            poetry run mike set-default --push latest
+            ;;
+          "pixi")
+            pixi run mike deploy --push --update-aliases ${RELEASE_TAG_VERSION} latest
+            pixi run mike set-default --push latest
+            ;;
+          *)
+            mike deploy --push --update-aliases ${RELEASE_TAG_VERSION} latest
+            mike set-default --push latest
+            ;;
+        esac
