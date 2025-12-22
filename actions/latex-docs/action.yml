@@ -84,12 +84,6 @@ runs:
         echo "Setting up Deltares LaTeX styles..."
         cd "$LATEX_DIR"
 
-        # Checkout SVN repository
-        if ! svn checkout --username "$SVN_USERNAME" --password "$SVN_PASSWORD" --non-interactive --trust-server-cert "$SVN_REPO_URL" temp_svn; then
-          echo "::error::Failed to checkout SVN repository"
-          exit 1
-        fi
-
         # Copy Deltares styles
         echo "Copying LaTeX styles..."
         if [ -d "temp_svn/templates/latex/tex/latex/deltares" ]; then
@@ -107,6 +101,7 @@ runs:
 
         # Cleanup
         rm -rf temp_svn
+        echo "Deltares LaTeX styles setup completed."
 
     - name: Generate LaTeX from Markdown (uv)
       if: inputs.package-manager == 'uv'
