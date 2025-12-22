@@ -1,0 +1,236 @@
+name: 'Generate LaTeX Documentation'
+description: 'Complete workflow for generating LaTeX/PDF documentation from Markdown using Deltares styles'
+
+inputs:
+  python-version:
+    description: 'Python version to install'
+    required: false
+    default: '3.12'
+  package-manager:
+    description: 'Package manager (uv, poetry, pixi)'
+    required: false
+    default: 'uv'
+  dependency-groups:
+    description: 'Dependency groups to install'
+    required: false
+    default: 'dev docs'
+  tex-files:
+    description: 'Comma-separated list of .tex files to compile (without extension)'
+    required: true
+  markdown-input-dir:
+    description: 'Input directory containing Markdown files'
+    required: false
+    default: 'docs/mkdocs/user_docs'
+  latex-output-dir:
+    description: 'Output directory for LaTeX files'
+    required: false
+    default: 'docs/end-user-docs/source'
+  svn-username:
+    description: 'SVN username for Deltares styles'
+    required: true
+  svn-password:
+    description: 'SVN password for Deltares styles'
+    required: true
+  svn-repo-url:
+    description: 'SVN repository URL for Deltares styles'
+    required: true
+  upload-artifacts:
+    description: 'Whether to upload PDF artifacts'
+    required: false
+    default: 'true'
+  artifact-name:
+    description: 'Name for the uploaded artifacts'
+    required: false
+    default: 'LaTeX-Documentation'
+  artifact-retention-days:
+    description: 'Retention days for artifacts'
+    required: false
+    default: '3'
+  upload-to-release:
+    description: 'Whether to upload PDFs to GitHub release'
+    required: false
+    default: 'true'
+  github-token:
+    description: 'GitHub token for release uploads'
+    required: false
+    default: ''
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Install System Dependencies
+      shell: bash
+      run: |
+        echo "Installing Pandoc and Subversion..."
+        sudo apt-get update
+        sudo apt-get install -y pandoc subversion
+        pandoc --version
+
+    - name: Setup Python Environment
+      uses: ../../python-setup/uv
+      with:
+        python-version: ${{ inputs.python-version }}
+        install-groups: ${{ inputs.dependency-groups }}
+        verify-lock: 'false'
+
+    - name: Checkout Deltares LaTeX Styles
+      shell: bash
+      env:
+        SVN_USERNAME: ${{ inputs.svn-username }}
+        SVN_PASSWORD: ${{ inputs.svn-password }}
+        SVN_REPO_URL: ${{ inputs.svn-repo-url }}
+        LATEX_DIR: ${{ inputs.latex-output-dir }}
+      run: |
+        echo "Setting up Deltares LaTeX styles..."
+        cd "$LATEX_DIR"
+        
+        # Ensure source directory exists
+        mkdir -p source
+
+        # Checkout SVN repository
+        if ! svn checkout --username "$SVN_USERNAME" --password "$SVN_PASSWORD" --non-interactive --trust-server-cert "$SVN_REPO_URL" temp_svn; then
+          echo "::error::Failed to checkout SVN repository"
+          exit 1
+        fi
+
+        # Copy Deltares styles
+        echo "Copying LaTeX styles..."
+        if [ -d "temp_svn/templates/latex/tex/latex/deltares" ]; then
+          cp -r temp_svn/templates/latex/tex/latex/deltares/* source/ || echo "::warning::Failed to copy deltares styles"
+        fi
+
+        if [ -d "temp_svn/templates/latex/tex/latex/nomentbl/deltares" ]; then
+          cp -r temp_svn/templates/latex/tex/latex/nomentbl/deltares/* source/ || echo "::warning::Failed to copy nomentbl styles"
+        fi
+
+        if [ -d "temp_svn/templates/latex/bibtex/bst/deltares" ]; then
+          cp -r temp_svn/templates/latex/bibtex/bst/deltares/* source/ || echo "::warning::Failed to copy bibtex styles"
+        fi
+
+        # Cleanup
+        rm -rf temp_svn
+
+    - name: Generate LaTeX from Markdown (uv)
+      if: inputs.package-manager == 'uv'
+      shell: bash
+      run: |
+        echo "Converting Markdown to LaTeX with uv..."
+        uv run ddocs markdown-to-latex \
+          --input ${{ inputs.markdown-input-dir }} \
+          --output ${{ inputs.latex-output-dir }}
+
+    - name: Generate LaTeX from Markdown (poetry)
+      if: inputs.package-manager == 'poetry'
+      shell: bash
+      run: |
+        echo "Converting Markdown to LaTeX with poetry..."
+        poetry run ddocs markdown-to-latex \
+          --input ${{ inputs.markdown-input-dir }} \
+          --output ${{ inputs.latex-output-dir }}
+
+    - name: Generate LaTeX from Markdown (pixi)
+      if: inputs.package-manager == 'pixi'
+      shell: bash
+      run: |
+        echo "Converting Markdown to LaTeX with pixi..."
+        pixi run ddocs markdown-to-latex \
+          --input ${{ inputs.markdown-input-dir }} \
+          --output ${{ inputs.latex-output-dir }}
+
+    - name: Generate LaTeX from Markdown (default)
+      if: inputs.package-manager != 'uv' && inputs.package-manager != 'poetry' && inputs.package-manager != 'pixi'
+      shell: bash
+      run: |
+        echo "Converting Markdown to LaTeX with system ddocs..."
+        ddocs markdown-to-latex \
+          --input ${{ inputs.markdown-input-dir }} \
+          --output ${{ inputs.latex-output-dir }}
+
+    - name: Install LaTeX
+      shell: bash
+      run: |
+        echo "Installing LaTeX packages..."
+        sudo apt-get update
+        sudo apt-get install -y \
+          texlive-latex-base \
+          texlive-latex-extra \
+          texlive-fonts-recommended \
+          texlive-fonts-extra \
+          texlive-bibtex-extra \
+          texlive-science biber
+
+        pdflatex --version
+
+    - name: Compile PDF Documents
+      shell: bash
+      run: |
+        echo "Compiling LaTeX documents..."
+        cd "${{ inputs.latex-output-dir }}"
+
+        # Parse tex files from input
+        IFS=',' read -ra TEX_FILES <<< "${{ inputs.tex-files }}"
+        
+        # First pass: compile all files
+        for tex_file in "${TEX_FILES[@]}"; do
+          tex_file=$(echo "$tex_file" | xargs)  # Trim whitespace
+          if [ -n "$tex_file" ]; then
+            echo "First pass: $tex_file.tex"
+            pdflatex "$tex_file.tex"
+          fi
+        done
+
+        # Run bibtex if citations exist
+        echo "Checking for citations and running bibtex..."
+        for tex_file in "${TEX_FILES[@]}"; do
+          tex_file=$(echo "$tex_file" | xargs)
+          if [ -n "$tex_file" ] && [ -f "$tex_file.aux" ]; then
+            if grep -q '\\citation' "$tex_file.aux" 2>/dev/null; then
+              echo "Running bibtex for $tex_file"
+              bibtex "$tex_file"
+            fi
+          fi
+        done
+
+        # Second and third pass: resolve references
+        for pass in 2 3; do
+          echo "Pass $pass: compiling all documents"
+          for tex_file in "${TEX_FILES[@]}"; do
+            tex_file=$(echo "$tex_file" | xargs)
+            if [ -n "$tex_file" ]; then
+              echo "Pass $pass: $tex_file.tex"
+              pdflatex "$tex_file.tex"
+            fi
+          done
+        done
+
+    - name: List Generated Files
+      shell: bash
+      run: |
+        echo "Generated LaTeX files:"
+        find ${{ inputs.latex-output-dir }} -name "*.tex" -type f
+        echo "Generated PDF files:"
+        find ${{ inputs.latex-output-dir }} -name "*.pdf" -type f
+
+    - name: Upload PDF Artifacts
+      if: inputs.upload-artifacts == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ inputs.latex-output-dir }}/*.pdf
+        retention-days: ${{ inputs.artifact-retention-days }}
+
+    - name: Get Release Tag
+      if: inputs.upload-to-release == 'true' && inputs.github-token != '' && github.event_name == 'release'
+      id: get_tag
+      shell: bash
+      run: |
+        echo "tag=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
+
+    - name: Upload PDFs to Release
+      if: inputs.upload-to-release == 'true' && inputs.github-token != '' && steps.get_tag.outputs.tag != ''
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ steps.get_tag.outputs.tag }}
+        files: ${{ inputs.latex-output-dir }}/*.pdf
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
