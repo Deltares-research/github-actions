@@ -67,7 +67,7 @@ runs:
         pandoc --version
 
     - name: Setup Python Environment
-      uses: ../../python-setup/uv
+      uses: Deltares-research/github-actions/actions/python-setup/uv
       with:
         python-version: ${{ inputs.python-version }}
         install-groups: ${{ inputs.dependency-groups }}
