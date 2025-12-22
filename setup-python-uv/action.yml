@@ -1,0 +1,62 @@
+name: 'Setup Python with uv'
+description: 'Setup Python environment with uv package manager and install dependencies'
+
+inputs:
+  python-version:
+    description: 'Python version to install'
+    required: false
+    default: '3.12'
+  install-groups:
+    description: 'uv sync groups to install (e.g., "dev", "dev docs")'
+    required: false
+    default: 'dev'
+  verify-lock:
+    description: 'Whether to verify the lock file is up to date'
+    required: false
+    default: 'true'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v4
+      with:
+        enable-cache: true
+        cache-dependency-glob: uv.lock
+
+    - name: Verify lock file is up to date
+      if: inputs.verify-lock == 'true'
+      shell: bash
+      run: uv lock --check
+
+    - name: Install Dependencies
+      shell: bash
+      run: |
+        echo "Installing groups: ${{ inputs.install-groups }}"
+        
+        # Simple approach: build array of arguments
+        args=("--frozen")
+        
+        # Split groups on space and comma
+        IFS=' ,' read -r -a groups <<< "${{ inputs.install-groups }}"
+        
+        for group in "${groups[@]}"; do
+          # Remove leading/trailing whitespace
+          group=$(echo "$group" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+          if [[ -n "$group" ]]; then
+            args+=("--group" "$group")
+          fi
+        done
+        
+        echo "Running: uv sync ${args[*]}"
+        uv sync "${args[@]}"
+
+    - name: List environment contents
+      shell: bash
+      run: |
+        uv pip list
