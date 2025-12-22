@@ -23,8 +23,11 @@ runs:
     - name: Configure git
       shell: bash
       run: |
+        echo "::group::Configuring Git for deployment"
         git config --global user.name '${{ github.actor }}'
         git config --global user.email '${{ github.actor }}@users.noreply.github.com'
+        echo "Git configured for user: ${{ github.actor }}"
+        echo "::endgroup::"
 
     - name: Deploy to GitHub Pages (Pull Request)
       if: inputs.deploy-type == 'pr'
@@ -32,7 +35,8 @@ runs:
       env:
         ACTIONS_DEPLOY_TOKEN: ${{ inputs.deploy-token }}
       run: |
-        echo "Deploying PR documentation..."
+        echo "::group::Deploying PR documentation to 'develop' version"
+        echo "Package manager: ${{ inputs.package-manager }}"
         case "${{ inputs.package-manager }}" in
           "uv")
             uv run mike deploy --push develop
@@ -47,6 +51,7 @@ runs:
             mike deploy --push develop
             ;;
         esac
+        echo "::endgroup::"
 
     - name: Deploy to GitHub Pages (Main)
       if: inputs.deploy-type == 'main'
@@ -54,25 +59,35 @@ runs:
       env:
         ACTIONS_DEPLOY_TOKEN: ${{ inputs.deploy-token }}
       run: |
-        echo "Deploying main branch documentation..."
+        echo "::group::Deploying main branch documentation"
+        echo "Package manager: ${{ inputs.package-manager }}"
         case "${{ inputs.package-manager }}" in
           "uv")
+            echo "Deploying main version..."
             uv run mike deploy --push main
+            echo "Setting main as default..."
             uv run mike set-default --push main
             ;;
           "poetry")
+            echo "Deploying main version..."
             poetry run mike deploy --push main
+            echo "Setting main as default..."
             poetry run mike set-default --push main
             ;;
           "pixi")
+            echo "Deploying main version..."
             pixi run mike deploy --push main
+            echo "Setting main as default..."
             pixi run mike set-default --push main
             ;;
           *)
+            echo "Deploying main version..."
             mike deploy --push main
+            echo "Setting main as default..."
             mike set-default --push main
             ;;
         esac
+        echo "::endgroup::"
 
     - name: Deploy to GitHub Pages (Release)
       if: inputs.deploy-type == 'release'
@@ -81,22 +96,33 @@ runs:
         ACTIONS_DEPLOY_TOKEN: ${{ inputs.deploy-token }}
         RELEASE_TAG_VERSION: ${{ inputs.release-tag }}
       run: |
-        echo "Deploying release documentation for tag: ${RELEASE_TAG_VERSION}"
+        echo "::group::Deploying release documentation"
+        echo "Release tag: ${RELEASE_TAG_VERSION}"
+        echo "Package manager: ${{ inputs.package-manager }}"
         case "${{ inputs.package-manager }}" in
           "uv")
+            echo "Deploying release ${RELEASE_TAG_VERSION} and updating 'latest' alias..."
             uv run mike deploy --push --update-aliases ${RELEASE_TAG_VERSION} latest
+            echo "Setting 'latest' as default..."
             uv run mike set-default --push latest
             ;;
           "poetry")
+            echo "Deploying release ${RELEASE_TAG_VERSION} and updating 'latest' alias..."
             poetry run mike deploy --push --update-aliases ${RELEASE_TAG_VERSION} latest
+            echo "Setting 'latest' as default..."
             poetry run mike set-default --push latest
             ;;
           "pixi")
+            echo "Deploying release ${RELEASE_TAG_VERSION} and updating 'latest' alias..."
             pixi run mike deploy --push --update-aliases ${RELEASE_TAG_VERSION} latest
+            echo "Setting 'latest' as default..."
             pixi run mike set-default --push latest
             ;;
           *)
+            echo "Deploying release ${RELEASE_TAG_VERSION} and updating 'latest' alias..."
             mike deploy --push --update-aliases ${RELEASE_TAG_VERSION} latest
+            echo "Setting 'latest' as default..."
             mike set-default --push latest
             ;;
         esac
+        echo "::endgroup::"

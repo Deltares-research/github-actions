@@ -39,6 +39,7 @@ runs:
       if: inputs.package-manager == 'uv'
       shell: bash
       run: |
+        echo "::group::Preparing uv dependency installation"
         echo "Installing groups: ${{ inputs.dependency-groups }}"
         
         # Build array of arguments
@@ -56,7 +57,11 @@ runs:
         done
         
         echo "Running: uv sync ${args[*]}"
+        echo "::endgroup::"
+        
+        echo "::group::Installing documentation dependencies"
         uv sync "${args[@]}"
+        echo "::endgroup::"
 
     # Poetry Package Manager
     - name: Setup Poetry
@@ -67,7 +72,11 @@ runs:
       if: inputs.package-manager == 'poetry'
       shell: bash
       run: |
+        echo "::group::Preparing Poetry installation"
         if [ -n "${{ inputs.poetry-extras }}" ]; then
+          echo "Installing with extras: ${{ inputs.poetry-extras }}"
+          echo "::endgroup::"
+          echo "::group::Installing documentation dependencies"
           poetry install --extras "${{ inputs.poetry-extras }}"
         else
           # Install with groups
@@ -79,8 +88,12 @@ runs:
               GROUP_ARGS="$GROUP_ARGS --with $group"
             fi
           done
+          echo "Installing with groups: $GROUPS_CLEAN"
+          echo "::endgroup::"
+          echo "::group::Installing documentation dependencies"
           poetry install $GROUP_ARGS
         fi
+        echo "::endgroup::"
 
     # Pixi Package Manager
     - name: Install Pixi
@@ -94,13 +107,15 @@ runs:
       if: inputs.package-manager == 'pixi'
       shell: bash
       run: |
+        echo "::group::Installing documentation dependencies with Pixi"
         # Pixi installs all dependencies by default, including optional groups
         pixi install
+        echo "::endgroup::"
         
     - name: List installed packages
       shell: bash
       run: |
-        echo "Installed packages:"
+        echo "::group::Installed packages summary"
         case "${{ inputs.package-manager }}" in
           "uv")
             uv pip list
@@ -115,3 +130,4 @@ runs:
             pip list
             ;;
         esac
+        echo "::endgroup::"

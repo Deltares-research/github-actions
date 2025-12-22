@@ -32,6 +32,18 @@ inputs:
 runs:
   using: 'composite'
   steps:
+    - name: Log deployment configuration
+      shell: bash
+      run: |
+        echo "::group::MkDocs Deployment Configuration"
+        echo "Python version: ${{ inputs.python-version }}"
+        echo "Package manager: ${{ inputs.package-manager }}"
+        echo "Dependency groups: ${{ inputs.dependency-groups }}"
+        echo "Deploy types: ${{ inputs.deploy-types }}"
+        echo "Event name: ${{ github.event_name }}"
+        echo "Ref: ${{ github.ref }}"
+        echo "::endgroup::"
+
     - name: Setup Python for Documentation
       uses: Deltares-research/github-actions/actions/mkdocs-deploy/setup@main
       with:
