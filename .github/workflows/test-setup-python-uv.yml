@@ -35,7 +35,7 @@ jobs:
           uv lock
           
       - name: Test setup-python-uv action
-        uses: ./setup-python-uv
+        uses: ./actions/python-setup/uv
         with:
           python-version: ${{ matrix.python-version }}
           install-groups: dev
@@ -76,7 +76,7 @@ jobs:
           uv lock
           
       - name: Test multiple groups
-        uses: ./setup-python-uv
+        uses: ./actions/python-setup/uv
         with:
           install-groups: dev docs test
           verify-lock: 'false'
