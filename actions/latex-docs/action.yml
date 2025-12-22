@@ -25,15 +25,6 @@ inputs:
     description: 'Output directory for LaTeX files'
     required: false
     default: 'docs/end-user-docs/source'
-  svn-username:
-    description: 'SVN username for Deltares styles'
-    required: true
-  svn-password:
-    description: 'SVN password for Deltares styles'
-    required: true
-  svn-repo-url:
-    description: 'SVN repository URL for Deltares styles'
-    required: true
   upload-artifacts:
     description: 'Whether to upload PDF artifacts'
     required: false
@@ -54,6 +45,7 @@ inputs:
     description: 'GitHub token for release uploads'
     required: false
     default: ''
+
 
 runs:
   using: 'composite'
@@ -76,18 +68,26 @@ runs:
     - name: Checkout Deltares LaTeX Styles
       shell: bash
       env:
-        SVN_USERNAME: ${{ inputs.svn-username }}
-        SVN_PASSWORD: ${{ inputs.svn-password }}
-        SVN_REPO_URL: ${{ inputs.svn-repo-url }}
         LATEX_DIR: ${{ inputs.latex-output-dir }}
+        SVN_USERNAME: ${{ secrets.SVN_USERNAME }}
+        SVN_PASSWORD: ${{ secrets.SVN_PASSWORD }}
+        SVN_REPO_URL: ${{ secrets.SVN_REPO_URL }}
       run: |
         echo "Setting up Deltares LaTeX styles..."
         cd "$LATEX_DIR"
 
+        # Check if SVN credentials are provided
+        if [ -z "$SVN_USERNAME" ] || [ -z "$SVN_PASSWORD" ] || [ -z "$SVN_REPO_URL" ]; then
+          echo "::warning::SVN credentials not provided. Skipping Deltares styles download."
+          echo "LaTeX compilation will proceed with system styles only."
+          exit 0
+        fi
+
         # Checkout SVN repository
+        echo "Downloading Deltares LaTeX styles from SVN..."
         if ! svn checkout --username "$SVN_USERNAME" --password "$SVN_PASSWORD" --non-interactive --trust-server-cert "$SVN_REPO_URL" temp_svn; then
-          echo "::error::Failed to checkout SVN repository"
-          exit 1
+          echo "::warning::Failed to checkout SVN repository. Continuing without Deltares styles."
+          exit 0
         fi
 
         # Copy Deltares styles
@@ -97,8 +97,7 @@ runs:
         fi
 
         if [ -d "temp_svn/templates/latex/tex/latex/nomentbl/deltares" ]; then
-          cp -r temp_svn/templates/latex/tex/latex/nomentbl/deltares/* . || echo "::warning::Failed to copy nomentbl
-           styles"
+          cp -r temp_svn/templates/latex/tex/latex/nomentbl/deltares/* . || echo "::warning::Failed to copy nomentbl styles"
         fi
 
         if [ -d "temp_svn/templates/latex/bibtex/bst/deltares" ]; then
@@ -107,6 +106,7 @@ runs:
 
         # Cleanup
         rm -rf temp_svn
+        echo "Deltares LaTeX styles setup completed."
 
     - name: Generate LaTeX from Markdown (uv)
       if: inputs.package-manager == 'uv'
