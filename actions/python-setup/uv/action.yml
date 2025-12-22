@@ -32,11 +32,15 @@ runs:
     - name: Verify lock file is up to date
       if: inputs.verify-lock == 'true'
       shell: bash
-      run: uv lock --check
+      run: |
+        echo "::group::Verifying uv.lock file is up to date"
+        uv lock --check
+        echo "::endgroup::"
 
     - name: Install Dependencies
       shell: bash
       run: |
+        echo "::group::Preparing uv sync command"
         echo "Installing groups: ${{ inputs.install-groups }}"
         
         # Simple approach: build array of arguments
@@ -54,9 +58,15 @@ runs:
         done
         
         echo "Running: uv sync ${args[*]}"
+        echo "::endgroup::"
+        
+        echo "::group::Installing dependencies with uv"
         uv sync "${args[@]}"
+        echo "::endgroup::"
 
     - name: List environment contents
       shell: bash
       run: |
+        echo "::group::Installed packages summary"
         uv pip list
+        echo "::endgroup::"
