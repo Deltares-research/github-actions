@@ -1,0 +1,130 @@
+name: 'Setup Python for Documentation'
+description: 'Setup Python environment for documentation building with support for uv, poetry, or pixi'
+
+inputs:
+  python-version:
+    description: 'Python version to install'
+    required: false
+    default: '3.12'
+  package-manager:
+    description: 'Package manager to use (uv, poetry, pixi)'
+    required: false
+    default: 'uv'
+  dependency-groups:
+    description: 'Dependency groups to install (e.g., "docs" for uv, or "docs" for poetry groups)'
+    required: false
+    default: 'docs'
+  poetry-extras:
+    description: 'Poetry extras to install (e.g., "docs,dev")'
+    required: false
+    default: ''
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    # UV Package Manager
+    - name: Install uv
+      if: inputs.package-manager == 'uv'
+      uses: astral-sh/setup-uv@v4
+      with:
+        enable-cache: true
+        cache-dependency-glob: uv.lock
+
+    - name: Install dependencies with uv
+      if: inputs.package-manager == 'uv'
+      shell: bash
+      run: |
+        echo "Installing groups: ${{ inputs.dependency-groups }}"
+        
+        # Build array of arguments
+        args=("--frozen")
+        
+        # Split groups on space and comma
+        IFS=' ,' read -r -a groups <<< "${{ inputs.dependency-groups }}"
+        
+        for group in "${groups[@]}"; do
+          # Remove leading/trailing whitespace
+          group=$(echo "$group" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+          if [[ -n "$group" ]]; then
+            args+=("--group" "$group")
+          fi
+        done
+        
+        echo "Running: uv sync ${args[*]}"
+        uv sync "${args[@]}"
+
+    # Poetry Package Manager
+    - name: Install Poetry
+      if: inputs.package-manager == 'poetry'
+      uses: snok/install-poetry@v1
+      with:
+        version: latest
+        virtualenvs-create: true
+        virtualenvs-in-project: true
+        installer-parallel: true
+
+    - name: Load cached venv
+      if: inputs.package-manager == 'poetry'
+      id: cached-poetry-dependencies
+      uses: actions/cache@v4
+      with:
+        path: .venv
+        key: venv-${{ runner.os }}-${{ inputs.python-version }}-${{ hashFiles('**/poetry.lock') }}
+
+    - name: Install dependencies with Poetry
+      if: inputs.package-manager == 'poetry' && steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        if [ -n "${{ inputs.poetry-extras }}" ]; then
+          poetry install --extras "${{ inputs.poetry-extras }}"
+        else
+          # Install with groups
+          GROUPS="${{ inputs.dependency-groups }}"
+          GROUPS_CLEAN=$(echo "$GROUPS" | sed 's/,/ /g' | tr -s ' ')
+          GROUP_ARGS=""
+          for group in $GROUPS_CLEAN; do
+            if [ -n "$group" ]; then
+              GROUP_ARGS="$GROUP_ARGS --with $group"
+            fi
+          done
+          poetry install $GROUP_ARGS
+        fi
+
+    # Pixi Package Manager
+    - name: Install Pixi
+      if: inputs.package-manager == 'pixi'
+      uses: prefix-dev/setup-pixi@v0.8.1
+      with:
+        pixi-version: latest
+        cache: true
+
+    - name: Install dependencies with Pixi
+      if: inputs.package-manager == 'pixi'
+      shell: bash
+      run: |
+        # Pixi installs all dependencies by default, including optional groups
+        pixi install
+        
+    - name: List installed packages
+      shell: bash
+      run: |
+        echo "Installed packages:"
+        case "${{ inputs.package-manager }}" in
+          "uv")
+            uv pip list
+            ;;
+          "poetry")
+            poetry show
+            ;;
+          "pixi")
+            pixi list
+            ;;
+          *)
+            pip list
+            ;;
+        esac

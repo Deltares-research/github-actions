@@ -1,0 +1,107 @@
+name: Deploy MkDocs Documentation
+
+on:
+  workflow_call:
+    inputs:
+      python-version:
+        description: 'Python version to use'
+        required: false
+        type: string
+        default: '3.12'
+      package-manager:
+        description: 'Package manager (uv, poetry, pixi)'
+        required: false
+        type: string
+        default: 'uv'
+      dependency-groups:
+        description: 'Dependency groups to install'
+        required: false
+        type: string
+        default: 'docs'
+      poetry-extras:
+        description: 'Poetry extras to install'
+        required: false
+        type: string
+        default: ''
+    secrets:
+      ACTIONS_DEPLOY_TOKEN:
+        description: 'GitHub token for deployment'
+        required: true
+
+permissions:
+  contents: write
+  pages: write
+
+jobs:
+  deploy-pr:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python for Documentation
+        uses: Deltares-research/github-actions/actions/mkdocs-deploy/setup@main
+        with:
+          python-version: ${{ inputs.python-version }}
+          package-manager: ${{ inputs.package-manager }}
+          dependency-groups: ${{ inputs.dependency-groups }}
+          poetry-extras: ${{ inputs.poetry-extras }}
+
+      - name: Deploy Documentation
+        uses: Deltares-research/github-actions/actions/mkdocs-deploy/deploy@main
+        with:
+          package-manager: ${{ inputs.package-manager }}
+          deploy-token: ${{ secrets.ACTIONS_DEPLOY_TOKEN }}
+          deploy-type: pr
+
+  deploy-main:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python for Documentation
+        uses: Deltares-research/github-actions/actions/mkdocs-deploy/setup@main
+        with:
+          python-version: ${{ inputs.python-version }}
+          package-manager: ${{ inputs.package-manager }}
+          dependency-groups: ${{ inputs.dependency-groups }}
+          poetry-extras: ${{ inputs.poetry-extras }}
+
+      - name: Deploy Documentation
+        uses: Deltares-research/github-actions/actions/mkdocs-deploy/deploy@main
+        with:
+          package-manager: ${{ inputs.package-manager }}
+          deploy-token: ${{ secrets.ACTIONS_DEPLOY_TOKEN }}
+          deploy-type: main
+
+  deploy-release:
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python for Documentation
+        uses: Deltares-research/github-actions/actions/mkdocs-deploy/setup@main
+        with:
+          python-version: ${{ inputs.python-version }}
+          package-manager: ${{ inputs.package-manager }}
+          dependency-groups: ${{ inputs.dependency-groups }}
+          poetry-extras: ${{ inputs.poetry-extras }}
+
+      - name: Deploy Documentation
+        uses: Deltares-research/github-actions/actions/mkdocs-deploy/deploy@main
+        with:
+          package-manager: ${{ inputs.package-manager }}
+          deploy-token: ${{ secrets.ACTIONS_DEPLOY_TOKEN }}
+          deploy-type: release
+          release-tag: ${{ github.event.release.tag_name }}
