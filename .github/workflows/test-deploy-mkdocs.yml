@@ -1,4 +1,4 @@
-name: Reusable MkDocs Deploy
+name: Test deploy-mkdocs
 
 on:
   workflow_call:
