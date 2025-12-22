@@ -1,0 +1,66 @@
+name: 'Complete MkDocs Deploy'
+description: 'Complete MkDocs workflow - setup Python environment and deploy documentation'
+
+inputs:
+  python-version:
+    description: 'Python version to install'
+    required: false
+    default: '3.12'
+  package-manager:
+    description: 'Package manager to use (uv, poetry, pixi)'
+    required: false
+    default: 'uv'
+  dependency-groups:
+    description: 'Dependency groups to install'
+    required: false
+    default: 'docs'
+  poetry-extras:
+    description: 'Poetry extras to install (e.g., "docs,dev")'
+    required: false
+    default: ''
+  deploy-types:
+    description: 'Comma-separated list of deploy types to run (pr, main, release)'
+    required: true
+  deploy-token:
+    description: 'GitHub token for deployment'
+    required: true
+  release-tag:
+    description: 'Release tag for version deployment'
+    required: false
+    default: ''
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Python for Documentation
+      uses: Deltares-research/github-actions/actions/mkdocs-deploy/setup@main
+      with:
+        python-version: ${{ inputs.python-version }}
+        package-manager: ${{ inputs.package-manager }}
+        dependency-groups: ${{ inputs.dependency-groups }}
+        poetry-extras: ${{ inputs.poetry-extras }}
+
+    - name: Deploy PR Documentation
+      if: contains(inputs.deploy-types, 'pr') && github.event_name == 'pull_request'
+      uses: Deltares-research/github-actions/actions/mkdocs-deploy/deploy@main
+      with:
+        package-manager: ${{ inputs.package-manager }}
+        deploy-token: ${{ inputs.deploy-token }}
+        deploy-type: pr
+
+    - name: Deploy Main Documentation
+      if: contains(inputs.deploy-types, 'main') && github.event_name == 'push' && github.ref == 'refs/heads/main'
+      uses: Deltares-research/github-actions/actions/mkdocs-deploy/deploy@main
+      with:
+        package-manager: ${{ inputs.package-manager }}
+        deploy-token: ${{ inputs.deploy-token }}
+        deploy-type: main
+
+    - name: Deploy Release Documentation
+      if: contains(inputs.deploy-types, 'release') && github.event_name == 'release'
+      uses: Deltares-research/github-actions/actions/mkdocs-deploy/deploy@main
+      with:
+        package-manager: ${{ inputs.package-manager }}
+        deploy-token: ${{ inputs.deploy-token }}
+        deploy-type: release
+        release-tag: ${{ inputs.release-tag }}
