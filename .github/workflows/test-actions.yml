@@ -1,4 +1,4 @@
-name: Test Actions
+name: Test setup-python-uv
 
 on:
   push:
