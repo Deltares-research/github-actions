@@ -2,48 +2,22 @@
 
 Shared GitHub Actions for Deltares repositories.
 
-## Available Actions
+## Actions by Topic
 
-### setup-python-uv
+### 🐍 Python Setup (`actions/python-setup/`)
+Actions for setting up Python environments for general development.
 
-Sets up Python with uv package manager and installs dependencies.
+- **`actions/python-setup/uv`** - Setup with uv package manager
 
-```yaml
-- name: Setup Python with uv
-  uses: deltares/github-actions/setup-python-uv@v1
-  with:
-    python-version: '3.12'        # Optional, default: '3.12'
-    install-groups: 'dev docs'    # Optional, default: 'dev'
-    verify-lock: 'true'          # Optional, default: 'true'
-```
+[📖 Full Documentation](actions/python-setup/README.md)
 
-### setup-python-docs
+### 📚 MkDocs Deployment (`actions/mkdocs-deploy/`)
+Complete workflow actions for MkDocs documentation - from setup to deployment.
 
-Sets up Python environment for documentation building with support for multiple package managers.
+- **`actions/mkdocs-deploy/setup`** - Universal Python setup supporting uv, poetry, pixi
+- **`actions/mkdocs-deploy/deploy`** - Deploy with mike versioning support
 
-```yaml
-- name: Setup Python for Documentation
-  uses: deltares/github-actions/setup-python-docs@v1
-  with:
-    python-version: '3.12'       # Optional, default: '3.12'
-    package-manager: 'uv'        # Optional: 'uv', 'poetry', 'pixi'
-    dependency-groups: 'docs'    # Optional, default: 'docs'
-    poetry-extras: ''            # Optional, for Poetry extras
-```
-
-### deploy-mkdocs
-
-Deploys MkDocs documentation to GitHub Pages using mike for versioning.
-
-```yaml
-- name: Deploy Documentation
-  uses: deltares/github-actions/deploy-mkdocs@v1
-  with:
-    package-manager: 'uv'        # Required: 'uv', 'poetry', 'pixi'
-    deploy-token: ${{ secrets.ACTIONS_DEPLOY_TOKEN }}
-    deploy-type: 'main'          # Required: 'pr', 'main', 'release'
-    release-tag: 'v1.0.0'       # Optional, required for release type
-```
+[📖 Full Documentation](actions/mkdocs-deploy/README.md)
 
 ## Reusable Workflows
 
