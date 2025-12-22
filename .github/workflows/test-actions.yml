@@ -16,7 +16,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         
-      - name: Create test uv.lock
+      - name: Create test project
         run: |
           mkdir -p test-project
           cd test-project
@@ -31,7 +31,14 @@ jobs:
           docs = ["sphinx"]
           EOF
           
+      - name: Generate uv.lock
+        run: |
+          cd test-project
+          pip install uv
+          uv lock
+          
       - name: Test setup-python-uv action
+        working-directory: test-project
         uses: ./setup-python-uv
         with:
           python-version: ${{ matrix.python-version }}
@@ -66,6 +73,11 @@ jobs:
           docs = ["sphinx", "mkdocs"]
           test = ["coverage"]
           EOF
+          
+      - name: Generate uv.lock for multiple groups test
+        run: |
+          pip install uv
+          uv lock
           
       - name: Test multiple groups
         uses: ./setup-python-uv
