@@ -61,10 +61,12 @@ runs:
     - name: Install System Dependencies
       shell: bash
       run: |
+        echo "::group::Installing System Dependencies"
         echo "Installing Pandoc and Subversion..."
         sudo apt-get update
         sudo apt-get install -y pandoc subversion
         pandoc --version
+        echo "::endgroup::"
 
     - name: Setup Python Environment
       uses: Deltares-research/github-actions/actions/python-setup/uv@main
@@ -81,18 +83,25 @@ runs:
         SVN_REPO_URL: ${{ inputs.svn-repo-url }}
         LATEX_DIR: ${{ inputs.latex-output-dir }}
       run: |
-        echo "Setting up Deltares LaTeX styles..."
+        echo "::group::Checkout Deltares LaTeX Styles"
         cd "$LATEX_DIR"
 
-        # Copy Deltares styles
-        echo "Copying LaTeX styles..."
+        echo "::group::Downloading from SVN Repository"
+        # Checkout SVN repository
+        if ! svn checkout --username "$SVN_USERNAME" --password "$SVN_PASSWORD" --non-interactive --trust-server-cert "$SVN_REPO_URL" temp_svn; then
+          echo "::warning::Failed to checkout SVN repository. Continuing without Deltares styles."
+          echo "::endgroup::"
+          exit 0
+        fi
+        echo "::endgroup::"
+
+        echo "::group::Copying LaTeX Style Files"
         if [ -d "temp_svn/templates/latex/tex/latex/deltares" ]; then
           cp -r temp_svn/templates/latex/tex/latex/deltares/* . || echo "::warning::Failed to copy deltares styles"
         fi
 
         if [ -d "temp_svn/templates/latex/tex/latex/nomentbl/deltares" ]; then
-          cp -r temp_svn/templates/latex/tex/latex/nomentbl/deltares/* . || echo "::warning::Failed to copy nomentbl
-           styles"
+          cp -r temp_svn/templates/latex/tex/latex/nomentbl/deltares/* . || echo "::warning::Failed to copy nomentbl styles"
         fi
 
         if [ -d "temp_svn/templates/latex/bibtex/bst/deltares" ]; then
@@ -102,47 +111,52 @@ runs:
         # Cleanup
         rm -rf temp_svn
         echo "Deltares LaTeX styles setup completed."
+        echo "::endgroup::"
 
     - name: Generate LaTeX from Markdown (uv)
       if: inputs.package-manager == 'uv'
       shell: bash
       run: |
-        echo "Converting Markdown to LaTeX with uv..."
+        echo "::group::Converting Markdown to LaTeX with uv"
         uv run ddocs markdown-to-latex \
           --input ${{ inputs.markdown-input-dir }} \
           --output ${{ inputs.latex-output-dir }}
+        echo "::endgroup::"
 
     - name: Generate LaTeX from Markdown (poetry)
       if: inputs.package-manager == 'poetry'
       shell: bash
       run: |
-        echo "Converting Markdown to LaTeX with poetry..."
+        echo "::group::Converting Markdown to LaTeX with poetry"
         poetry run ddocs markdown-to-latex \
           --input ${{ inputs.markdown-input-dir }} \
           --output ${{ inputs.latex-output-dir }}
+        echo "::endgroup::"
 
     - name: Generate LaTeX from Markdown (pixi)
       if: inputs.package-manager == 'pixi'
       shell: bash
       run: |
-        echo "Converting Markdown to LaTeX with pixi..."
+        echo "::group::Converting Markdown to LaTeX with pixi"
         pixi run ddocs markdown-to-latex \
           --input ${{ inputs.markdown-input-dir }} \
           --output ${{ inputs.latex-output-dir }}
+        echo "::endgroup::"
 
     - name: Generate LaTeX from Markdown (default)
       if: inputs.package-manager != 'uv' && inputs.package-manager != 'poetry' && inputs.package-manager != 'pixi'
       shell: bash
       run: |
-        echo "Converting Markdown to LaTeX with system ddocs..."
+        echo "::group::Converting Markdown to LaTeX with system ddocs"
         ddocs markdown-to-latex \
           --input ${{ inputs.markdown-input-dir }} \
           --output ${{ inputs.latex-output-dir }}
+        echo "::endgroup::"
 
     - name: Install LaTeX
       shell: bash
       run: |
-        echo "Installing LaTeX packages..."
+        echo "::group::Installing LaTeX Packages"
         sudo apt-get update
         sudo apt-get install -y \
           texlive-latex-base \
@@ -153,17 +167,19 @@ runs:
           texlive-science biber
 
         pdflatex --version
+        echo "::endgroup::"
 
     - name: Compile PDF Documents
       shell: bash
       run: |
-        echo "Compiling LaTeX documents..."
+        echo "::group::Preparing LaTeX Compilation"
         cd "${{ inputs.latex-output-dir }}"
-
         # Parse tex files from input
         IFS=',' read -ra TEX_FILES <<< "${{ inputs.tex-files }}"
+        echo "Files to compile: ${TEX_FILES[*]}"
+        echo "::endgroup::"
         
-        # First pass: compile all files
+        echo "::group::First Pass - Initial Compilation"
         for tex_file in "${TEX_FILES[@]}"; do
           tex_file=$(echo "$tex_file" | xargs)  # Trim whitespace
           if [ -n "$tex_file" ]; then
@@ -171,9 +187,9 @@ runs:
             pdflatex "$tex_file.tex"
           fi
         done
+        echo "::endgroup::"
 
-        # Run bibtex if citations exist
-        echo "Checking for citations and running bibtex..."
+        echo "::group::Processing Citations with BibTeX"
         for tex_file in "${TEX_FILES[@]}"; do
           tex_file=$(echo "$tex_file" | xargs)
           if [ -n "$tex_file" ] && [ -f "$tex_file.aux" ]; then
@@ -183,8 +199,9 @@ runs:
             fi
           fi
         done
+        echo "::endgroup::"
 
-        # Second and third pass: resolve references
+        echo "::group::Final Passes - Resolving References"
         for pass in 2 3; do
           echo "Pass $pass: compiling all documents"
           for tex_file in "${TEX_FILES[@]}"; do
@@ -195,6 +212,7 @@ runs:
             fi
           done
         done
+        echo "::endgroup::"
 
     - name: List Generated Files
       shell: bash
