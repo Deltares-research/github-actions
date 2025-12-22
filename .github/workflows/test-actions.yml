@@ -18,8 +18,6 @@ jobs:
         
       - name: Create test project
         run: |
-          mkdir -p test-project
-          cd test-project
           cat > pyproject.toml << 'EOF'
           [project]
           name = "test"
@@ -33,12 +31,10 @@ jobs:
           
       - name: Generate uv.lock
         run: |
-          cd test-project
           pip install uv
           uv lock
           
       - name: Test setup-python-uv action
-        working-directory: test-project
         uses: ./setup-python-uv
         with:
           python-version: ${{ matrix.python-version }}
@@ -84,3 +80,7 @@ jobs:
         with:
           install-groups: dev docs test
           verify-lock: 'false'
+          
+      - name: Verify installation worked
+        run: |
+          uv pip list
