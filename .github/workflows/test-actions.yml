@@ -20,14 +20,16 @@ jobs:
         run: |
           mkdir -p test-project
           cd test-project
-          echo '[project]
-name = "test"
-version = "0.1.0"
-dependencies = ["requests"]
-
-[dependency-groups]
-dev = ["pytest"]
-docs = ["sphinx"]' > pyproject.toml
+          cat > pyproject.toml << 'EOF'
+          [project]
+          name = "test"
+          version = "0.1.0"
+          dependencies = ["requests"]
+          
+          [dependency-groups]
+          dev = ["pytest"]
+          docs = ["sphinx"]
+          EOF
           
       - name: Test setup-python-uv action
         uses: ./setup-python-uv
@@ -53,15 +55,17 @@ docs = ["sphinx"]' > pyproject.toml
         
       - name: Create test project
         run: |
-          echo '[project]
-name = "test"
-version = "0.1.0"
-dependencies = ["requests"]
-
-[dependency-groups]
-dev = ["pytest", "black"]
-docs = ["sphinx", "mkdocs"]
-test = ["coverage"]' > pyproject.toml
+          cat > pyproject.toml << 'EOF'
+          [project]
+          name = "test"
+          version = "0.1.0"
+          dependencies = ["requests"]
+          
+          [dependency-groups]
+          dev = ["pytest", "black"]
+          docs = ["sphinx", "mkdocs"]
+          test = ["coverage"]
+          EOF
           
       - name: Test multiple groups
         uses: ./setup-python-uv
