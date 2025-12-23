@@ -1,0 +1,277 @@
+name: 'Python Package Release'
+description: 'Complete automated release workflow for Python packages with version bumping, changelog generation, and GitHub release creation'
+
+inputs:
+  release-branch:
+    description: 'Branch to create release from'
+    required: false
+    default: 'main'
+  major:
+    description: 'The new major version'
+    required: false
+    default: ''
+  minor:
+    description: 'The new minor version'
+    required: false
+    default: ''
+  patch:
+    description: 'The new patch version'
+    required: false
+    default: ''
+  increment:
+    description: 'The type of increment (MAJOR, MINOR, PATCH)'
+    required: false
+    default: ''
+  version:
+    description: 'Full version to release (e.g. 1.0.0 or 1.0.0-beta.1)'
+    required: false
+    default: ''
+  python-version:
+    description: 'Python version to install'
+    required: false
+    default: '3.12'
+  package-manager:
+    description: 'Package manager (uv, poetry, pixi)'
+    required: false
+    default: 'uv'
+  dependency-groups:
+    description: 'Dependency groups to install'
+    required: false
+    default: 'dev docs'
+  poetry-extras:
+    description: 'Poetry extras to install (e.g., "dev,docs")'
+    required: false
+    default: ''
+  github-token:
+    description: 'GitHub token for API calls and releases'
+    required: true
+  check-admin-permissions:
+    description: 'Whether to check if user has admin permissions'
+    required: false
+    default: 'true'
+  build-wheel:
+    description: 'Whether to build and include wheel in release'
+    required: false
+    default: 'true'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Check User Permissions
+      if: inputs.check-admin-permissions == 'true'
+      shell: bash
+      run: |
+        echo "::group::Checking User Permissions"
+        echo "Checking if user ${{ github.actor }} has admin permissions..."
+
+        # Get user's permission level for this repository
+        PERMISSION=$(curl -s -H "Authorization: token ${{ inputs.github-token }}" \
+          "https://api.github.com/repos/${{ github.repository }}/collaborators/${{ github.actor }}/permission" \
+          | jq -r '.permission // "none"')
+
+        echo "User permission level: $PERMISSION"
+
+        # Check if user has admin permissions
+        if [ "$PERMISSION" != "admin" ]; then
+          echo "::error::Access denied. Only repository administrators can trigger releases."
+          echo "::error::User '${{ github.actor }}' has '$PERMISSION' permissions, but 'admin' is required."
+          exit 1
+        fi
+
+        echo "✅ Permission check passed. User has admin access."
+        echo "::endgroup::"
+
+    - name: Determine Release Version
+      id: get_version
+      shell: bash
+      run: |
+        echo "::group::Determining Release Version"
+        if [ -n "${{ inputs.version }}" ]; then
+          echo "Using manual version input: ${{ inputs.version }}"
+          echo "VERSION=${{ inputs.version }}" >> $GITHUB_OUTPUT
+        else
+          VERSION="${{ inputs.major }}.${{ inputs.minor }}.${{ inputs.patch }}"
+          echo "Using constructed version: $VERSION"
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+        fi
+        echo "::endgroup::"
+
+    - name: Setup Python Environment
+      uses: Deltares-research/github-actions/actions/python-setup/uv@main
+      if: inputs.package-manager == 'uv'
+      with:
+        python-version: ${{ inputs.python-version }}
+        install-groups: ${{ inputs.dependency-groups }}
+
+    - name: Setup Python Environment (Poetry)
+      uses: Deltares-research/github-actions/actions/mkdocs-deploy/setup@main
+      if: inputs.package-manager == 'poetry'
+      with:
+        python-version: ${{ inputs.python-version }}
+        package-manager: 'poetry'
+        poetry-extras: ${{ inputs.poetry-extras }}
+
+    - name: Setup Python Environment (Pixi)
+      uses: Deltares-research/github-actions/actions/mkdocs-deploy/setup@main
+      if: inputs.package-manager == 'pixi'
+      with:
+        python-version: ${{ inputs.python-version }}
+        package-manager: 'pixi'
+        dependency-groups: ${{ inputs.dependency-groups }}
+
+    - name: Generate Changelog
+      shell: bash
+      run: |
+        echo "::group::Generating Changelog"
+        cz changelog --unreleased-version="${{ steps.get_version.outputs.VERSION }}" --incremental
+        echo "::endgroup::"
+
+    - name: Get User Info
+      id: user_info
+      shell: bash
+      run: |
+        echo "::group::Getting User Information"
+        USER_JSON=$(curl -H "Authorization: token ${{ inputs.github-token }}" "https://api.github.com/users/${{ github.actor }}")
+        USER_NAME=$(echo "$USER_JSON" | jq -r .name)
+        USER_EMAIL=$(echo "$USER_JSON" | jq -r .email)
+        echo "name=$USER_NAME" >> $GITHUB_OUTPUT
+        echo "email=$USER_EMAIL" >> $GITHUB_OUTPUT
+        echo "::endgroup::"
+
+    - name: Configure Git
+      shell: bash
+      run: |
+        echo "::group::Configuring Git"
+        git config --local user.email "${{ steps.user_info.outputs.email }}"
+        git config --local user.name "${{ steps.user_info.outputs.name }}"
+        echo "::endgroup::"
+
+    - name: Bump Version (uv)
+      if: inputs.package-manager == 'uv'
+      shell: bash
+      run: |
+        echo "::group::Version Bump with uv"
+        set -e  # Exit immediately if a command exits with a non-zero status
+        echo "Bumping version to ${{ steps.get_version.outputs.VERSION }}"
+        uv run cz bump --yes --check-consistency "${{ steps.get_version.outputs.VERSION }}"
+
+        echo "Updating lock file after version bump"
+        uv lock
+
+        echo "Committing lock file update"
+        git add uv.lock
+        git commit -m "chore: update lock file after version bump" || echo "No lock file changes to commit"
+
+        echo "Pushing changes to repository"
+        if ! git push; then
+          echo "::error::Failed to push changes to repository"
+          exit 1
+        fi
+
+        echo "Pushing tags to repository"
+        if ! git push --tags; then
+          echo "::error::Failed to push tags to repository"
+          exit 1
+        fi
+
+        echo "Version bump completed successfully"
+        echo "::endgroup::"
+
+    - name: Bump Version (poetry)
+      if: inputs.package-manager == 'poetry'
+      shell: bash
+      run: |
+        echo "::group::Version Bump with poetry"
+        set -e
+        echo "Bumping version to ${{ steps.get_version.outputs.VERSION }}"
+        poetry run cz bump --yes --check-consistency "${{ steps.get_version.outputs.VERSION }}"
+
+        echo "Updating lock file after version bump"
+        poetry lock
+
+        echo "Committing lock file update"
+        git add poetry.lock
+        git commit -m "chore: update lock file after version bump" || echo "No lock file changes to commit"
+
+        echo "Pushing changes to repository"
+        if ! git push; then
+          echo "::error::Failed to push changes to repository"
+          exit 1
+        fi
+
+        echo "Pushing tags to repository"
+        if ! git push --tags; then
+          echo "::error::Failed to push tags to repository"
+          exit 1
+        fi
+
+        echo "Version bump completed successfully"
+        echo "::endgroup::"
+
+    - name: Bump Version (pixi)
+      if: inputs.package-manager == 'pixi'
+      shell: bash
+      run: |
+        echo "::group::Version Bump with pixi"
+        set -e
+        echo "Bumping version to ${{ steps.get_version.outputs.VERSION }}"
+        pixi run cz bump --yes --check-consistency "${{ steps.get_version.outputs.VERSION }}"
+
+        echo "Updating lock file after version bump"
+        pixi install
+
+        echo "Committing lock file update"
+        git add pixi.lock
+        git commit -m "chore: update lock file after version bump" || echo "No lock file changes to commit"
+
+        echo "Pushing changes to repository"
+        if ! git push; then
+          echo "::error::Failed to push changes to repository"
+          exit 1
+        fi
+
+        echo "Pushing tags to repository"
+        if ! git push --tags; then
+          echo "::error::Failed to push tags to repository"
+          exit 1
+        fi
+
+        echo "Version bump completed successfully"
+        echo "::endgroup::"
+
+    - name: Build Wheel (uv)
+      if: inputs.build-wheel == 'true' && inputs.package-manager == 'uv'
+      shell: bash
+      run: |
+        echo "::group::Building Wheel with uv"
+        uv build
+        echo "WHEEL_PATH=$(ls -t dist/*.whl | head -n 1)" >> $GITHUB_ENV
+        echo "::endgroup::"
+
+    - name: Build Wheel (poetry)
+      if: inputs.build-wheel == 'true' && inputs.package-manager == 'poetry'
+      shell: bash
+      run: |
+        echo "::group::Building Wheel with poetry"
+        poetry build
+        echo "WHEEL_PATH=$(ls -t dist/*.whl | head -n 1)" >> $GITHUB_ENV
+        echo "::endgroup::"
+
+    - name: Build Wheel (pixi)
+      if: inputs.build-wheel == 'true' && inputs.package-manager == 'pixi'
+      shell: bash
+      run: |
+        echo "::group::Building Wheel with pixi"
+        pixi run python -m build
+        echo "WHEEL_PATH=$(ls -t dist/*.whl | head -n 1)" >> $GITHUB_ENV
+        echo "::endgroup::"
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        name: Release v${{ steps.get_version.outputs.VERSION }}
+        tag_name: "${{ steps.get_version.outputs.VERSION }}"
+        generate_release_notes: true
+        prerelease: ${{ contains(steps.get_version.outputs.VERSION, 'b') }}
+        token: ${{ inputs.github-token }}
+        files: ${{ inputs.build-wheel == 'true' && env.WHEEL_PATH || '' }}
