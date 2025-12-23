@@ -153,7 +153,7 @@ runs:
         echo "::group::Version Bump with uv"
         set -e  # Exit immediately if a command exits with a non-zero status
         echo "Bumping version to ${{ steps.get_version.outputs.VERSION }}"
-        uv run cz bump --yes --check-consistency "${{ steps.get_version.outputs.VERSION }}"
+        ${{ inputs.package-manager }} run cz bump --yes --check-consistency "${{ steps.get_version.outputs.VERSION }}"
 
         echo "Updating lock file after version bump"
         uv lock
@@ -239,21 +239,12 @@ runs:
         echo "Version bump completed successfully"
         echo "::endgroup::"
 
-    - name: Build Wheel (uv)
-      if: inputs.build-wheel == 'true' && inputs.package-manager == 'uv'
+    - name: Build Wheel (uv/poetry)
+      if: inputs.build-wheel == 'true' && (inputs.package-manager == 'uv' || inputs.package-manager == 'poetry')
       shell: bash
       run: |
-        echo "::group::Building Wheel with uv"
-        uv build
-        echo "WHEEL_PATH=$(ls -t dist/*.whl | head -n 1)" >> $GITHUB_ENV
-        echo "::endgroup::"
-
-    - name: Build Wheel (poetry)
-      if: inputs.build-wheel == 'true' && inputs.package-manager == 'poetry'
-      shell: bash
-      run: |
-        echo "::group::Building Wheel with poetry"
-        poetry build
+        echo "::group::Building Wheel with ${{ inputs.package-manager }}"
+        ${{ inputs.package-manager }} build
         echo "WHEEL_PATH=$(ls -t dist/*.whl | head -n 1)" >> $GITHUB_ENV
         echo "::endgroup::"
 
