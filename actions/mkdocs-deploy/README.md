@@ -4,6 +4,21 @@ Actions for setting up Python environment and deploying MkDocs documentation to 
 
 ## Available Actions
 
+### complete (`actions/mkdocs-deploy/complete`) - Recommended
+Complete MkDocs workflow combining setup and deployment in one action.
+
+```yaml
+- uses: Deltares-research/github-actions/actions/mkdocs-deploy/complete@v1
+  with:
+    python-version: '3.12'      # Optional, default: '3.12'
+    package-manager: 'uv'       # Optional: 'uv', 'poetry', 'pixi'  
+    dependency-groups: 'docs'   # Optional, default: 'docs'
+    poetry-extras: ''           # Optional, for Poetry extras
+    deploy-types: 'main'        # Required: 'pr', 'main', 'release' or comma-separated
+    deploy-token: ${{ secrets.ACTIONS_DEPLOY_TOKEN }}  # Required
+    release-tag: 'v1.0.0'      # Optional, required for release type
+```
+
 ### setup (`actions/mkdocs-deploy/setup`)
 Setup Python environment for documentation building with support for uv, poetry, and pixi.
 

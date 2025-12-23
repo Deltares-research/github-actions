@@ -19,11 +19,27 @@ Complete workflow actions for MkDocs documentation - from setup to deployment.
 
 [📖 Full Documentation](actions/mkdocs-deploy/README.md)
 
+### 📄 LaTeX Documentation (`actions/latex-docs/`)
+Complete workflow for generating LaTeX/PDF documentation from Markdown using Deltares styles.
+
+- **`actions/latex-docs`** - Setup environment, fetch Deltares styles, convert Markdown to LaTeX, compile PDFs
+
+[📖 Full Documentation](actions/latex-docs/README.md)
+
+### 🚀 Python Release (`actions/python-release/`)
+Complete automated release workflow for Python packages with version bumping, changelog generation, and GitHub release creation.
+
+- **`actions/python-release`** - Permission checks, version bumping, changelog generation, wheel building, GitHub releases
+
+[📖 Full Documentation](actions/python-release/README.md)
+
 ## Reusable Workflows
 
 ### MkDocs Deployment Workflow
 
 Complete workflow for deploying MkDocs documentation with support for multiple package managers.
+
+**Note**: Reusable workflows must be in `.github/workflows/` due to GitHub requirements.
 
 ```yaml
 # .github/workflows/docs.yml
@@ -39,7 +55,7 @@ on:
 
 jobs:
   deploy-docs:
-    uses: Deltares-research/github-actions/.github/workflows/reusable-mkdocs-deploy.yml@v1
+    uses: Deltares-research/github-actions/.github/workflows/deploy-mkdocs.yml@v1
     with:
       python-version: '3.12'
       package-manager: 'uv'       # or 'poetry', 'pixi'
