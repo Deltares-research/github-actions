@@ -44,7 +44,7 @@ runs:
       uses: actions/cache/restore@v4
       id: cache
       with:
-        path: ~/.cache/uv
+        path: ${{ env.UV_CACHE_DIR }}
         key: uv-${{ runner.os }}-py${{ inputs.python-version }}-uv${{ inputs.uv-version }}-${{ hashFiles('**/uv.lock') }}
 
     - name: Verify lock file is up to date
@@ -102,5 +102,5 @@ runs:
       if: inputs.cache-write == 'true' && steps.cache.outputs.cache-hit != 'true'
       uses: actions/cache/save@v4
       with:
-        path: ~/.cache/uv
+        path: ${{ env.UV_CACHE_DIR }}
         key: uv-${{ runner.os }}-py${{ inputs.python-version }}-uv${{ inputs.uv-version }}-${{ hashFiles('**/uv.lock') }}

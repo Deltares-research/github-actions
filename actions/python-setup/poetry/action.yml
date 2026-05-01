@@ -1,5 +1,5 @@
 name: 'Setup Python with Poetry'
-description: 'Setup Python environment with Poetry and install dependencies, with virtualenv caching'
+description: 'Setup Python environment with Poetry and install dependencies, with download-cache speedup'
 
 inputs:
   python-version:
@@ -48,11 +48,11 @@ runs:
         poetry config virtualenvs.path ~/.virtualenvs
         echo "::endgroup::"
 
-    - name: Restore Poetry virtualenv
+    - name: Restore Poetry artifact cache
       uses: actions/cache/restore@v4
       id: cache
       with:
-        path: ~/.virtualenvs
+        path: ~/.cache/pypoetry
         key: poetry-${{ runner.os }}-py${{ inputs.python-version }}-poetry${{ inputs.poetry-version }}-${{ hashFiles('**/poetry.lock') }}
 
     - name: Verify lock file is up to date
@@ -64,7 +64,6 @@ runs:
         echo "::endgroup::"
 
     - name: Install Dependencies
-      if: steps.cache.outputs.cache-hit != 'true'
       shell: bash
       env:
         INSTALL_GROUPS: ${{ inputs.install-groups }}
@@ -107,9 +106,9 @@ runs:
         poetry show
         echo "::endgroup::"
 
-    - name: Save Poetry virtualenv
+    - name: Save Poetry artifact cache
       if: inputs.cache-write == 'true' && steps.cache.outputs.cache-hit != 'true'
       uses: actions/cache/save@v4
       with:
-        path: ~/.virtualenvs
+        path: ~/.cache/pypoetry
         key: poetry-${{ runner.os }}-py${{ inputs.python-version }}-poetry${{ inputs.poetry-version }}-${{ hashFiles('**/poetry.lock') }}
