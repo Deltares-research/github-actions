@@ -23,7 +23,7 @@ inputs:
     required: false
     default: 'true'
   cache-write:
-    description: 'Whether to write to the cache. Pass a conditional like "$${{ github.ref_name == ''main'' }}" to skip cache writes on PRs and save cache space. Example: "true", "false".'
+    description: 'Whether to write to the cache. Set to "false" (or a workflow expression evaluating to "false" on PRs) to skip cache writes and save cache space. Example: "true", "false".'
     required: false
     default: 'true'
 
