@@ -49,7 +49,7 @@ runs:
       id: cache
       with:
         path: ~/.virtualenvs
-        key: venv-${{ runner.os }}-${{ inputs.python-version }}-${{ hashFiles('**/poetry.lock') }}
+        key: venv-${{ runner.os }}-py${{ inputs.python-version }}-poetry${{ inputs.poetry-version }}-groups-${{ inputs.install-groups }}-extras-${{ inputs.install-extras }}-${{ hashFiles('**/poetry.lock') }}
 
     - name: Verify lock file is up to date
       if: inputs.verify-lock == 'true'
@@ -62,26 +62,27 @@ runs:
     - name: Install Dependencies
       if: steps.cache.outputs.cache-hit != 'true'
       shell: bash
+      env:
+        INSTALL_GROUPS: ${{ inputs.install-groups }}
+        INSTALL_EXTRAS: ${{ inputs.install-extras }}
       run: |
         echo "::group::Preparing Poetry install command"
         args=()
 
-        if [[ -n "${{ inputs.install-extras }}" ]]; then
-          echo "Installing extras: ${{ inputs.install-extras }}"
-          IFS=' ,' read -r -a extras <<< "${{ inputs.install-extras }}"
+        if [[ -n "$INSTALL_EXTRAS" ]]; then
+          echo "Installing extras: $INSTALL_EXTRAS"
+          IFS=' ,' read -r -a extras <<< "$INSTALL_EXTRAS"
           for extra in "${extras[@]}"; do
-            extra=$(echo "$extra" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
             if [[ -n "$extra" ]]; then
               args+=("--extras" "$extra")
             fi
           done
         fi
 
-        if [[ -n "${{ inputs.install-groups }}" ]]; then
-          echo "Installing groups: ${{ inputs.install-groups }}"
-          IFS=' ,' read -r -a groups <<< "${{ inputs.install-groups }}"
+        if [[ -n "$INSTALL_GROUPS" ]]; then
+          echo "Installing groups: $INSTALL_GROUPS"
+          IFS=' ,' read -r -a groups <<< "$INSTALL_GROUPS"
           for group in "${groups[@]}"; do
-            group=$(echo "$group" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
             if [[ -n "$group" ]]; then
               args+=("--with" "$group")
             fi
