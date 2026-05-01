@@ -1,0 +1,97 @@
+name: 'Setup Python with Poetry'
+description: 'Setup Python environment with Poetry and install dependencies, with virtualenv caching'
+
+inputs:
+  python-version:
+    description: 'Python version to install'
+    required: false
+    default: '3.12'
+  poetry-version:
+    description: 'Poetry version to install'
+    required: false
+    default: '2.3.3'
+  install-groups:
+    description: 'Poetry groups to install via --with (e.g., "dev", "dev docs")'
+    required: false
+    default: ''
+  install-extras:
+    description: 'Poetry extras to install via --extras (e.g., "dev,docs")'
+    required: false
+    default: ''
+  verify-lock:
+    description: 'Whether to verify the poetry.lock file is up to date'
+    required: false
+    default: 'true'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install Poetry
+      uses: abatilo/actions-poetry@0dd19c9498c3dc8728967849d0d2eae428a8a3d8 # v4
+      with:
+        poetry-version: ${{ inputs.poetry-version }}
+
+    - name: Set Poetry config
+      shell: bash
+      run: |
+        echo "::group::Configuring Poetry"
+        poetry config virtualenvs.in-project false
+        poetry config virtualenvs.path ~/.virtualenvs
+        echo "::endgroup::"
+
+    - name: Cache Poetry virtualenv
+      uses: actions/cache@v4
+      id: cache
+      with:
+        path: ~/.virtualenvs
+        key: venv-${{ runner.os }}-${{ inputs.python-version }}-${{ hashFiles('**/poetry.lock') }}
+
+    - name: Verify lock file is up to date
+      if: inputs.verify-lock == 'true'
+      shell: bash
+      run: |
+        echo "::group::Verifying poetry.lock file is up to date"
+        poetry check --lock
+        echo "::endgroup::"
+
+    - name: Install Dependencies
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        echo "::group::Preparing Poetry install command"
+        args=()
+
+        if [[ -n "${{ inputs.install-extras }}" ]]; then
+          echo "Installing with extras: ${{ inputs.install-extras }}"
+          args+=("--extras" "${{ inputs.install-extras }}")
+        fi
+
+        if [[ -n "${{ inputs.install-groups }}" ]]; then
+          echo "Installing groups: ${{ inputs.install-groups }}"
+          IFS=' ,' read -r -a groups <<< "${{ inputs.install-groups }}"
+          for group in "${groups[@]}"; do
+            group=$(echo "$group" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+            if [[ -n "$group" ]]; then
+              args+=("--with" "$group")
+            fi
+          done
+        fi
+
+        echo "Running: poetry install ${args[*]}"
+        echo "::endgroup::"
+
+        echo "::group::Installing dependencies with Poetry"
+        poetry install "${args[@]}"
+        echo "::endgroup::"
+
+    - name: List environment contents
+      shell: bash
+      run: |
+        echo "::group::Installed packages summary"
+        poetry show
+        echo "::endgroup::"
