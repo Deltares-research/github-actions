@@ -35,8 +35,13 @@ runs:
       uses: astral-sh/setup-uv@v4
       with:
         version: ${{ inputs.uv-version }}
-        enable-cache: true
-        cache-dependency-glob: uv.lock
+
+    - name: Cache uv download cache
+      uses: actions/cache@v4
+      id: cache
+      with:
+        path: ~/.cache/uv
+        key: uv-${{ runner.os }}-py${{ inputs.python-version }}-uv${{ inputs.uv-version }}-${{ hashFiles('**/uv.lock') }}
 
     - name: Verify lock file is up to date
       if: inputs.verify-lock == 'true'

@@ -49,7 +49,7 @@ runs:
       id: cache
       with:
         path: ~/.virtualenvs
-        key: venv-${{ runner.os }}-py${{ inputs.python-version }}-poetry${{ inputs.poetry-version }}-groups-${{ inputs.install-groups }}-extras-${{ inputs.install-extras }}-${{ hashFiles('**/poetry.lock') }}
+        key: poetry-${{ runner.os }}-py${{ inputs.python-version }}-poetry${{ inputs.poetry-version }}-${{ hashFiles('**/poetry.lock') }}
 
     - name: Verify lock file is up to date
       if: inputs.verify-lock == 'true'
