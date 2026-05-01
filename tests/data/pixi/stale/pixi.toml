@@ -1,0 +1,11 @@
+[project]
+name = "test-pixi-stale"
+version = "0.1.0"
+description = "Fixture for python-setup/pixi: manifest newer than lock (verify-lock should fail). Lock generated with only requests; manifest now lists click as well so `pixi install --locked` fails."
+channels = ["conda-forge"]
+platforms = ["linux-64", "win-64"]
+
+[dependencies]
+python = "3.12.*"
+requests = "*"
+click = "*"

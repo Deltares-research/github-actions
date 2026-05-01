@@ -1,0 +1,52 @@
+name: 'Setup Python with Pixi'
+description: 'Setup Python environment with Pixi and install environments, with lock-file caching'
+
+inputs:
+  pixi-version:
+    description: 'Pixi version to install. Example: "v0.49.0", "v0.48.0", "latest".'
+    required: false
+    default: 'v0.49.0'
+  environments:
+    description: 'Pixi environments to install (space-separated; passed through to setup-pixi). Empty means the default environment. Example: "", "py312", "py311 py312".'
+    required: false
+    default: ''
+  activate-environment:
+    description: 'Pixi environment to activate on PATH after install, so plain `python` resolves into that env. Must also be listed in `environments`. Example: "py312", "default".'
+    required: false
+    default: ''
+  verify-lock:
+    description: 'Whether to run pixi install --locked to confirm pixi.lock matches the manifest. Example: "true", "false".'
+    required: false
+    default: 'true'
+  cache-write:
+    description: 'Whether to write to the pixi cache. Pass a conditional like "${{ github.ref_name == ''main'' }}" to skip cache writes on PRs and save cache space. Example: "true", "false".'
+    required: false
+    default: 'true'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Pixi
+      uses: prefix-dev/setup-pixi@v0.8.14
+      with:
+        pixi-version: ${{ inputs.pixi-version }}
+        environments: ${{ inputs.environments }}
+        activate-environment: ${{ inputs.activate-environment }}
+        cache: true
+        cache-key: pixi-${{ runner.os }}-pixi${{ inputs.pixi-version }}-${{ hashFiles('**/pixi.lock') }}
+        cache-write: ${{ inputs.cache-write }}
+
+    - name: Verify lock file is up to date
+      if: inputs.verify-lock == 'true'
+      shell: bash
+      run: |
+        echo "::group::Verifying pixi.lock is up to date"
+        pixi install --locked
+        echo "::endgroup::"
+
+    - name: List environment contents
+      shell: bash
+      run: |
+        echo "::group::Installed packages summary"
+        pixi list
+        echo "::endgroup::"

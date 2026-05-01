@@ -1,0 +1,19 @@
+[project]
+name = "test-pixi-multi"
+version = "0.1.0"
+description = "Fixture for python-setup/pixi: multiple Python-version environments (py311, py312)"
+channels = ["conda-forge"]
+platforms = ["linux-64", "win-64"]
+
+[dependencies]
+requests = "*"
+
+[feature.py311.dependencies]
+python = "3.11.*"
+
+[feature.py312.dependencies]
+python = "3.12.*"
+
+[environments]
+py311 = ["py311"]
+py312 = ["py312"]
