@@ -255,3 +255,72 @@ jobs:
             echo "::error::Expected uv 0.9.5, got $INSTALLED"
             exit 1
           fi
+
+  cache-write-true-saves:
+    name: cache-write=true persists cache
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage fixture with per-run-unique lock
+        # Inject github.run_id into uv.lock as a comment so hashFiles produces
+        # a unique cache key for this CI run — guarantees we start from an
+        # empty cache state regardless of prior CI history.
+        run: |
+          cp tests/data/uv/defaults/pyproject.toml ./pyproject.toml
+          cp tests/data/uv/defaults/uv.lock ./uv.lock
+          sed -i "1i # test-run-${{ github.run_id }}-write-true" uv.lock
+
+      - name: Run action with cache-write enabled
+        uses: ./actions/python-setup/uv
+        with:
+          cache-write: 'true'
+
+      - name: Look up cache after action ran
+        id: verify
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/uv
+          key: uv-${{ runner.os }}-py3.12-uv-${{ hashFiles('**/uv.lock') }}
+          lookup-only: true
+
+      - name: Assert cache was saved
+        run: |
+          if [ "${{ steps.verify.outputs.cache-hit }}" != "true" ]; then
+            echo "::error::cache-write=true should have saved cache, but key was not found"
+            exit 1
+          fi
+          echo "Cache was correctly saved"
+
+  cache-write-false-skips-save:
+    name: cache-write=false skips cache save
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage fixture with per-run-unique lock
+        run: |
+          cp tests/data/uv/defaults/pyproject.toml ./pyproject.toml
+          cp tests/data/uv/defaults/uv.lock ./uv.lock
+          sed -i "1i # test-run-${{ github.run_id }}-write-false" uv.lock
+
+      - name: Run action with cache-write disabled
+        uses: ./actions/python-setup/uv
+        with:
+          cache-write: 'false'
+
+      - name: Look up cache after action ran
+        id: verify
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/uv
+          key: uv-${{ runner.os }}-py3.12-uv-${{ hashFiles('**/uv.lock') }}
+          lookup-only: true
+
+      - name: Assert cache was NOT saved
+        run: |
+          if [ "${{ steps.verify.outputs.cache-hit }}" == "true" ]; then
+            echo "::error::cache-write=false should NOT have saved cache, but key was found"
+            exit 1
+          fi
+          echo "Cache was correctly skipped"

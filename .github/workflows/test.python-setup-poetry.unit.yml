@@ -259,3 +259,72 @@ jobs:
             echo "::error::Expected poetry 2.3.0, got $INSTALLED"
             exit 1
           fi
+
+  cache-write-true-saves:
+    name: cache-write=true persists cache
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage fixture with per-run-unique lock
+        # Inject github.run_id into poetry.lock as a comment so hashFiles produces
+        # a unique cache key for this CI run — guarantees we start from an
+        # empty cache state regardless of prior CI history.
+        run: |
+          cp tests/data/poetry/defaults/pyproject.toml ./pyproject.toml
+          cp tests/data/poetry/defaults/poetry.lock ./poetry.lock
+          sed -i "1i # test-run-${{ github.run_id }}-write-true" poetry.lock
+
+      - name: Run action with cache-write enabled
+        uses: ./actions/python-setup/poetry
+        with:
+          cache-write: 'true'
+
+      - name: Look up cache after action ran
+        id: verify
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.virtualenvs
+          key: poetry-${{ runner.os }}-py3.12-poetry2.3.3-${{ hashFiles('**/poetry.lock') }}
+          lookup-only: true
+
+      - name: Assert cache was saved
+        run: |
+          if [ "${{ steps.verify.outputs.cache-hit }}" != "true" ]; then
+            echo "::error::cache-write=true should have saved cache, but key was not found"
+            exit 1
+          fi
+          echo "Cache was correctly saved"
+
+  cache-write-false-skips-save:
+    name: cache-write=false skips cache save
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage fixture with per-run-unique lock
+        run: |
+          cp tests/data/poetry/defaults/pyproject.toml ./pyproject.toml
+          cp tests/data/poetry/defaults/poetry.lock ./poetry.lock
+          sed -i "1i # test-run-${{ github.run_id }}-write-false" poetry.lock
+
+      - name: Run action with cache-write disabled
+        uses: ./actions/python-setup/poetry
+        with:
+          cache-write: 'false'
+
+      - name: Look up cache after action ran
+        id: verify
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.virtualenvs
+          key: poetry-${{ runner.os }}-py3.12-poetry2.3.3-${{ hashFiles('**/poetry.lock') }}
+          lookup-only: true
+
+      - name: Assert cache was NOT saved
+        run: |
+          if [ "${{ steps.verify.outputs.cache-hit }}" == "true" ]; then
+            echo "::error::cache-write=false should NOT have saved cache, but key was found"
+            exit 1
+          fi
+          echo "Cache was correctly skipped"

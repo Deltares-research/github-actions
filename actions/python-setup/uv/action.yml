@@ -3,23 +3,27 @@ description: 'Setup Python environment with uv package manager and install depen
 
 inputs:
   python-version:
-    description: 'Python version to install'
+    description: 'Python version to install. Example: "3.12", "3.13", "3.12.5".'
     required: false
     default: '3.12'
   uv-version:
-    description: 'uv version to install (empty = latest)'
+    description: 'uv version to install. Empty string means latest. Example: "", "0.9.5", "0.9.8".'
     required: false
     default: ''
   install-groups:
-    description: 'Dependency groups to install via --group (e.g., "dev", "dev docs")'
+    description: 'PEP 735 dependency groups to install via uv sync --group. Space- or comma-separated. Example: "dev", "dev docs", "dev,docs".'
     required: false
     default: ''
   install-extras:
-    description: 'Optional-dependency extras to install via --extra (e.g., "dev,docs")'
+    description: 'PEP 621 optional-dependency extras to install via uv sync --extra. Space- or comma-separated. Example: "docs", "dev docs", "dev,docs".'
     required: false
     default: ''
   verify-lock:
-    description: 'Whether to verify the uv.lock file is up to date'
+    description: 'Whether to run uv lock --check before install to confirm uv.lock matches pyproject.toml. Example: "true", "false".'
+    required: false
+    default: 'true'
+  cache-write:
+    description: 'Whether to write to the cache. Pass a conditional like "${{ github.ref_name == ''main'' }}" to skip cache writes on PRs and save cache space. Example: "true", "false".'
     required: false
     default: 'true'
 
@@ -36,8 +40,8 @@ runs:
       with:
         version: ${{ inputs.uv-version }}
 
-    - name: Cache uv download cache
-      uses: actions/cache@v4
+    - name: Restore uv download cache
+      uses: actions/cache/restore@v4
       id: cache
       with:
         path: ~/.cache/uv
@@ -93,3 +97,10 @@ runs:
         echo "::group::Installed packages summary"
         uv pip list
         echo "::endgroup::"
+
+    - name: Save uv download cache
+      if: inputs.cache-write == 'true' && steps.cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: ~/.cache/uv
+        key: uv-${{ runner.os }}-py${{ inputs.python-version }}-uv${{ inputs.uv-version }}-${{ hashFiles('**/uv.lock') }}

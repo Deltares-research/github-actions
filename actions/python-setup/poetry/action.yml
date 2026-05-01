@@ -3,23 +3,27 @@ description: 'Setup Python environment with Poetry and install dependencies, wit
 
 inputs:
   python-version:
-    description: 'Python version to install'
+    description: 'Python version to install. Example: "3.12", "3.13", "3.12.5".'
     required: false
     default: '3.12'
   poetry-version:
-    description: 'Poetry version to install'
+    description: 'Poetry version to install. Example: "2.3.3", "2.3.0", "1.8.4".'
     required: false
     default: '2.3.3'
   install-groups:
-    description: 'Poetry groups to install via --with (e.g., "dev", "dev docs")'
+    description: 'Poetry groups to install via poetry install --with. Space- or comma-separated. Example: "dev", "dev docs", "dev,docs".'
     required: false
     default: ''
   install-extras:
-    description: 'Poetry extras to install via --extras (e.g., "dev,docs")'
+    description: 'Poetry extras to install via poetry install --extras. Space- or comma-separated. Example: "docs", "dev docs", "dev,docs".'
     required: false
     default: ''
   verify-lock:
-    description: 'Whether to verify the poetry.lock file is up to date'
+    description: 'Whether to run poetry check --lock before install to confirm poetry.lock matches pyproject.toml. Example: "true", "false".'
+    required: false
+    default: 'true'
+  cache-write:
+    description: 'Whether to write to the cache. Pass a conditional like "${{ github.ref_name == ''main'' }}" to skip cache writes on PRs and save cache space. Example: "true", "false".'
     required: false
     default: 'true'
 
@@ -44,8 +48,8 @@ runs:
         poetry config virtualenvs.path ~/.virtualenvs
         echo "::endgroup::"
 
-    - name: Cache Poetry virtualenv
-      uses: actions/cache@v4
+    - name: Restore Poetry virtualenv
+      uses: actions/cache/restore@v4
       id: cache
       with:
         path: ~/.virtualenvs
@@ -102,3 +106,10 @@ runs:
         echo "::group::Installed packages summary"
         poetry show
         echo "::endgroup::"
+
+    - name: Save Poetry virtualenv
+      if: inputs.cache-write == 'true' && steps.cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: ~/.virtualenvs
+        key: poetry-${{ runner.os }}-py${{ inputs.python-version }}-poetry${{ inputs.poetry-version }}-${{ hashFiles('**/poetry.lock') }}
