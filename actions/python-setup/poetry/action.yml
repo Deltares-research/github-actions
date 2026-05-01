@@ -67,8 +67,14 @@ runs:
         args=()
 
         if [[ -n "${{ inputs.install-extras }}" ]]; then
-          echo "Installing with extras: ${{ inputs.install-extras }}"
-          args+=("--extras" "${{ inputs.install-extras }}")
+          echo "Installing extras: ${{ inputs.install-extras }}"
+          IFS=' ,' read -r -a extras <<< "${{ inputs.install-extras }}"
+          for extra in "${extras[@]}"; do
+            extra=$(echo "$extra" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+            if [[ -n "$extra" ]]; then
+              args+=("--extras" "$extra")
+            fi
+          done
         fi
 
         if [[ -n "${{ inputs.install-groups }}" ]]; then
