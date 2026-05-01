@@ -17,41 +17,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Create test project
+      - name: Stage fixture (basic)
         run: |
-          cat > pyproject.toml << 'EOF'
-          [tool.poetry]
-          name = "test-poetry"
-          version = "0.1.0"
-          description = "Test project for python-setup/poetry action"
-          authors = ["Test <test@example.com>"]
-
-          [tool.poetry.dependencies]
-          python = "^3.12"
-          requests = "*"
-
-          [tool.poetry.group.dev.dependencies]
-          pytest = "*"
-
-          [tool.poetry.group.docs.dependencies]
-          sphinx = "*"
-
-          [build-system]
-          requires = ["poetry-core"]
-          build-backend = "poetry.core.masonry.api"
-          EOF
-
-      - name: Generate poetry.lock
-        run: |
-          pip install poetry
-          poetry lock
+          cp tests/data/poetry/basic/pyproject.toml ./pyproject.toml
+          cp tests/data/poetry/basic/poetry.lock ./poetry.lock
 
       - name: Test setup-python-poetry action
         uses: ./actions/python-setup/poetry
         with:
           python-version: ${{ matrix.python-version }}
           install-groups: dev
-          verify-lock: 'false'
+          verify-lock: 'true'
 
       - name: Verify Python version
         run: |
@@ -72,45 +48,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Create test project
+      - name: Stage fixture (multi-groups)
         run: |
-          cat > pyproject.toml << 'EOF'
-          [tool.poetry]
-          name = "test-poetry-multi"
-          version = "0.1.0"
-          description = "Multi-group test"
-          authors = ["Test <test@example.com>"]
-
-          [tool.poetry.dependencies]
-          python = "^3.12"
-          requests = "*"
-
-          [tool.poetry.group.dev.dependencies]
-          pytest = "*"
-          black = "*"
-
-          [tool.poetry.group.docs.dependencies]
-          sphinx = "*"
-          mkdocs = "*"
-
-          [tool.poetry.group.test.dependencies]
-          coverage = "*"
-
-          [build-system]
-          requires = ["poetry-core"]
-          build-backend = "poetry.core.masonry.api"
-          EOF
-
-      - name: Generate poetry.lock
-        run: |
-          pip install poetry
-          poetry lock
+          cp tests/data/poetry/multi-groups/pyproject.toml ./pyproject.toml
+          cp tests/data/poetry/multi-groups/poetry.lock ./poetry.lock
 
       - name: Test multiple groups
         uses: ./actions/python-setup/poetry
         with:
           install-groups: dev docs test
-          verify-lock: 'false'
+          verify-lock: 'true'
 
       - name: Verify installation worked
         run: |
@@ -122,40 +69,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Create test project with extras
+      - name: Stage fixture (extras)
         run: |
-          cat > pyproject.toml << 'EOF'
-          [tool.poetry]
-          name = "test-poetry-extras"
-          version = "0.1.0"
-          description = "Extras test"
-          authors = ["Test <test@example.com>"]
-
-          [tool.poetry.dependencies]
-          python = "^3.12"
-          requests = "*"
-          sphinx = { version = "*", optional = true }
-          pytest = { version = "*", optional = true }
-
-          [tool.poetry.extras]
-          docs = ["sphinx"]
-          dev = ["pytest"]
-
-          [build-system]
-          requires = ["poetry-core"]
-          build-backend = "poetry.core.masonry.api"
-          EOF
-
-      - name: Generate poetry.lock
-        run: |
-          pip install poetry
-          poetry lock
+          cp tests/data/poetry/extras/pyproject.toml ./pyproject.toml
+          cp tests/data/poetry/extras/poetry.lock ./poetry.lock
 
       - name: Test extras installation
         uses: ./actions/python-setup/poetry
         with:
           install-extras: 'dev,docs'
-          verify-lock: 'false'
+          verify-lock: 'true'
 
       - name: Verify extras installed
         run: |
