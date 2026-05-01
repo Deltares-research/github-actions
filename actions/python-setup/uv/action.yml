@@ -6,12 +6,20 @@ inputs:
     description: 'Python version to install'
     required: false
     default: '3.12'
-  install-groups:
-    description: 'uv sync groups to install (e.g., "dev", "dev docs")'
+  uv-version:
+    description: 'uv version to install (empty = latest)'
     required: false
-    default: 'dev'
+    default: ''
+  install-groups:
+    description: 'Dependency groups to install via --group (e.g., "dev", "dev docs")'
+    required: false
+    default: ''
+  install-extras:
+    description: 'Optional-dependency extras to install via --extra (e.g., "dev,docs")'
+    required: false
+    default: ''
   verify-lock:
-    description: 'Whether to verify the lock file is up to date'
+    description: 'Whether to verify the uv.lock file is up to date'
     required: false
     default: 'true'
 
@@ -26,6 +34,7 @@ runs:
     - name: Install uv
       uses: astral-sh/setup-uv@v4
       with:
+        version: ${{ inputs.uv-version }}
         enable-cache: true
         cache-dependency-glob: uv.lock
 
@@ -41,25 +50,33 @@ runs:
       shell: bash
       run: |
         echo "::group::Preparing uv sync command"
-        echo "Installing groups: ${{ inputs.install-groups }}"
-        
-        # Simple approach: build array of arguments
         args=("--frozen")
-        
-        # Split groups on space and comma
-        IFS=' ,' read -r -a groups <<< "${{ inputs.install-groups }}"
-        
-        for group in "${groups[@]}"; do
-          # Remove leading/trailing whitespace
-          group=$(echo "$group" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-          if [[ -n "$group" ]]; then
-            args+=("--group" "$group")
-          fi
-        done
-        
+
+        if [[ -n "${{ inputs.install-extras }}" ]]; then
+          echo "Installing extras: ${{ inputs.install-extras }}"
+          IFS=' ,' read -r -a extras <<< "${{ inputs.install-extras }}"
+          for extra in "${extras[@]}"; do
+            extra=$(echo "$extra" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+            if [[ -n "$extra" ]]; then
+              args+=("--extra" "$extra")
+            fi
+          done
+        fi
+
+        if [[ -n "${{ inputs.install-groups }}" ]]; then
+          echo "Installing groups: ${{ inputs.install-groups }}"
+          IFS=' ,' read -r -a groups <<< "${{ inputs.install-groups }}"
+          for group in "${groups[@]}"; do
+            group=$(echo "$group" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+            if [[ -n "$group" ]]; then
+              args+=("--group" "$group")
+            fi
+          done
+        fi
+
         echo "Running: uv sync ${args[*]}"
         echo "::endgroup::"
-        
+
         echo "::group::Installing dependencies with uv"
         uv sync "${args[@]}"
         echo "::endgroup::"
