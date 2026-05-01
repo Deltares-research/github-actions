@@ -1,0 +1,163 @@
+name: Test setup-python-pixi
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  defaults:
+    name: defaults (no environments specified)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage fixture
+        run: |
+          cp tests/data/pixi/defaults/pixi.toml ./pixi.toml
+          cp tests/data/pixi/defaults/pixi.lock ./pixi.lock
+
+      - name: Run action
+        uses: ./actions/python-setup/pixi
+        with:
+          verify-lock: 'true'
+
+      - name: Verify default env installed and main dep importable
+        run: |
+          pixi run python -c "import requests; print('requests', requests.__version__)"
+
+  single-environment:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage fixture
+        run: |
+          cp tests/data/pixi/multi-env/pixi.toml ./pixi.toml
+          cp tests/data/pixi/multi-env/pixi.lock ./pixi.lock
+
+      - name: Run action
+        uses: ./actions/python-setup/pixi
+        with:
+          environments: 'py312'
+          verify-lock: 'true'
+
+      - name: Verify py312 environment is Python 3.12
+        run: |
+          pixi run -e py312 python -c "import sys; assert sys.version_info[:2] == (3, 12), sys.version"
+
+  multi-environments-space:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage fixture
+        run: |
+          cp tests/data/pixi/multi-env/pixi.toml ./pixi.toml
+          cp tests/data/pixi/multi-env/pixi.lock ./pixi.lock
+
+      - name: Run action
+        uses: ./actions/python-setup/pixi
+        with:
+          environments: 'py311 py312'
+          verify-lock: 'true'
+
+      - name: Verify both environments installed at correct Python versions
+        run: |
+          pixi run -e py311 python -c "import sys; assert sys.version_info[:2] == (3, 11), sys.version"
+          pixi run -e py312 python -c "import sys; assert sys.version_info[:2] == (3, 12), sys.version"
+
+  activate-environment:
+    name: activate-environment puts env on PATH
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage fixture
+        run: |
+          cp tests/data/pixi/multi-env/pixi.toml ./pixi.toml
+          cp tests/data/pixi/multi-env/pixi.lock ./pixi.lock
+
+      - name: Run action with py311 activated
+        uses: ./actions/python-setup/pixi
+        with:
+          environments: 'py311 py312'
+          activate-environment: 'py311'
+          verify-lock: 'true'
+
+      - name: Verify python on PATH is 3.11
+        run: |
+          python --version
+          python -c "import sys; assert sys.version_info[:2] == (3, 11), 'Expected Python 3.11 on PATH after activate-environment=py311, got ' + sys.version"
+
+  verify-lock-stale:
+    name: verify-lock with stale lock should fail
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage stale fixture
+        run: |
+          cp tests/data/pixi/stale/pixi.toml ./pixi.toml
+          cp tests/data/pixi/stale/pixi.lock ./pixi.lock
+
+      - name: Run action (expected to fail at verify-lock)
+        id: run
+        continue-on-error: true
+        uses: ./actions/python-setup/pixi
+        with:
+          verify-lock: 'true'
+
+      - name: Assert action failed
+        run: |
+          if [ "${{ steps.run.outcome }}" != "failure" ]; then
+            echo "::error::Expected action to fail on stale lock, but outcome was ${{ steps.run.outcome }}"
+            exit 1
+          fi
+          echo "Action correctly failed on stale lock"
+
+  verify-lock-disabled:
+    name: verify-lock=false works on healthy lock
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage fixture
+        run: |
+          cp tests/data/pixi/defaults/pixi.toml ./pixi.toml
+          cp tests/data/pixi/defaults/pixi.lock ./pixi.lock
+
+      - name: Run action with verify-lock disabled
+        uses: ./actions/python-setup/pixi
+        with:
+          verify-lock: 'false'
+
+      - name: Verify install proceeded
+        run: |
+          pixi run python -c "import requests"
+
+  pixi-version-pin:
+    name: pixi-version pin honored
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage fixture
+        run: |
+          cp tests/data/pixi/defaults/pixi.toml ./pixi.toml
+          cp tests/data/pixi/defaults/pixi.lock ./pixi.lock
+
+      - name: Run action with pinned pixi version
+        uses: ./actions/python-setup/pixi
+        with:
+          pixi-version: 'v0.48.0'
+          verify-lock: 'true'
+
+      - name: Verify pinned pixi version active
+        run: |
+          INSTALLED=$(pixi --version | awk '{print $2}')
+          echo "Installed pixi: $INSTALLED"
+          if [ "$INSTALLED" != "0.48.0" ]; then
+            echo "::error::Expected pixi 0.48.0, got $INSTALLED"
+            exit 1
+          fi
