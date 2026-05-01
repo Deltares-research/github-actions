@@ -276,11 +276,16 @@ jobs:
         with:
           cache-write: 'true'
 
+      - name: Wait for cache propagation
+        # actions/cache/save returns success but the cache is not always
+        # immediately queryable from the same job. Brief sleep avoids flakes.
+        run: sleep 10
+
       - name: Look up cache after action ran
         id: verify
         uses: actions/cache/restore@v4
         with:
-          path: ~/.cache/uv
+          path: ${{ env.UV_CACHE_DIR }}
           key: uv-${{ runner.os }}-py3.12-uv-${{ hashFiles('**/uv.lock') }}
           lookup-only: true
 
@@ -313,7 +318,7 @@ jobs:
         id: verify
         uses: actions/cache/restore@v4
         with:
-          path: ~/.cache/uv
+          path: ${{ env.UV_CACHE_DIR }}
           key: uv-${{ runner.os }}-py3.12-uv-${{ hashFiles('**/uv.lock') }}
           lookup-only: true
 

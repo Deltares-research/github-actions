@@ -280,11 +280,16 @@ jobs:
         with:
           cache-write: 'true'
 
+      - name: Wait for cache propagation
+        # actions/cache/save returns success but the cache is not always
+        # immediately queryable from the same job. Brief sleep avoids flakes.
+        run: sleep 10
+
       - name: Look up cache after action ran
         id: verify
         uses: actions/cache/restore@v4
         with:
-          path: ~/.virtualenvs
+          path: ~/.cache/pypoetry
           key: poetry-${{ runner.os }}-py3.12-poetry2.3.3-${{ hashFiles('**/poetry.lock') }}
           lookup-only: true
 
@@ -317,7 +322,7 @@ jobs:
         id: verify
         uses: actions/cache/restore@v4
         with:
-          path: ~/.virtualenvs
+          path: ~/.cache/pypoetry
           key: poetry-${{ runner.os }}-py3.12-poetry2.3.3-${{ hashFiles('**/poetry.lock') }}
           lookup-only: true
 
