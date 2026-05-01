@@ -6,80 +6,256 @@ on:
   workflow_dispatch:
 
 jobs:
-  test-setup-python-poetry:
+  defaults:
+    name: defaults (no groups, no extras)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage fixture
+        run: |
+          cp tests/data/poetry/defaults/pyproject.toml ./pyproject.toml
+          cp tests/data/poetry/defaults/poetry.lock ./poetry.lock
+
+      - name: Run action
+        uses: ./actions/python-setup/poetry
+        with:
+          verify-lock: 'true'
+
+      - name: Verify only main deps installed
+        run: |
+          poetry run python -c "import requests"
+          # Neither pytest nor sphinx should be present (no groups/extras requested)
+          if poetry run python -c "import pytest" 2>/dev/null; then
+            echo "::error::pytest should NOT be installed when no groups requested"
+            exit 1
+          fi
+          if poetry run python -c "import sphinx" 2>/dev/null; then
+            echo "::error::sphinx should NOT be installed when no extras requested"
+            exit 1
+          fi
+
+  python-matrix:
+    name: python-matrix (single group)
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         python-version: ["3.12", "3.13"]
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Stage fixture (basic)
+      - name: Stage fixture
         run: |
           cp tests/data/poetry/basic/pyproject.toml ./pyproject.toml
           cp tests/data/poetry/basic/poetry.lock ./poetry.lock
 
-      - name: Test setup-python-poetry action
+      - name: Run action
         uses: ./actions/python-setup/poetry
         with:
           python-version: ${{ matrix.python-version }}
           install-groups: dev
           verify-lock: 'true'
 
-      - name: Verify Python version
+      - name: Verify Python version + dev group installed
         run: |
-          python --version
           python -c "import sys; assert sys.version_info[:2] == tuple(map(int, '${{ matrix.python-version }}'.split('.')[:2]))"
-
-      - name: Verify Poetry is installed
-        run: |
-          poetry --version
-
-      - name: Verify dev group dependency installed
-        run: |
           poetry run python -c "import pytest; print('pytest', pytest.__version__)"
 
-  test-multiple-groups:
+  multi-groups-space:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Stage fixture (multi-groups)
+      - name: Stage fixture
         run: |
           cp tests/data/poetry/multi-groups/pyproject.toml ./pyproject.toml
           cp tests/data/poetry/multi-groups/poetry.lock ./poetry.lock
 
-      - name: Test multiple groups
+      - name: Run action
         uses: ./actions/python-setup/poetry
         with:
-          install-groups: dev docs test
+          install-groups: 'dev docs test'
           verify-lock: 'true'
 
-      - name: Verify installation worked
+      - name: Verify all three groups installed
         run: |
-          poetry show
+          poetry run python -c "import pytest, black, sphinx, mkdocs, coverage"
 
-  test-extras:
+  multi-groups-comma:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Stage fixture (extras)
+      - name: Stage fixture
+        run: |
+          cp tests/data/poetry/multi-groups/pyproject.toml ./pyproject.toml
+          cp tests/data/poetry/multi-groups/poetry.lock ./poetry.lock
+
+      - name: Run action
+        uses: ./actions/python-setup/poetry
+        with:
+          install-groups: 'dev,docs,test'
+          verify-lock: 'true'
+
+      - name: Verify all three groups installed
+        run: |
+          poetry run python -c "import pytest, black, sphinx, mkdocs, coverage"
+
+  single-extra:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage fixture
         run: |
           cp tests/data/poetry/extras/pyproject.toml ./pyproject.toml
           cp tests/data/poetry/extras/poetry.lock ./poetry.lock
 
-      - name: Test extras installation
+      - name: Run action
+        uses: ./actions/python-setup/poetry
+        with:
+          install-extras: 'docs'
+          verify-lock: 'true'
+
+      - name: Verify only docs extra installed
+        run: |
+          poetry run python -c "import sphinx"
+          if poetry run python -c "import pytest" 2>/dev/null; then
+            echo "::error::pytest extra should NOT be installed"
+            exit 1
+          fi
+
+  multi-extras-comma:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage fixture
+        run: |
+          cp tests/data/poetry/extras/pyproject.toml ./pyproject.toml
+          cp tests/data/poetry/extras/poetry.lock ./poetry.lock
+
+      - name: Run action
         uses: ./actions/python-setup/poetry
         with:
           install-extras: 'dev,docs'
           verify-lock: 'true'
 
-      - name: Verify extras installed
+      - name: Verify both extras installed
         run: |
-          poetry run python -c "import pytest, sphinx; print('pytest', pytest.__version__, 'sphinx', sphinx.__version__)"
+          poetry run python -c "import pytest, sphinx"
+
+  multi-extras-space:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage fixture
+        run: |
+          cp tests/data/poetry/extras/pyproject.toml ./pyproject.toml
+          cp tests/data/poetry/extras/poetry.lock ./poetry.lock
+
+      - name: Run action
+        uses: ./actions/python-setup/poetry
+        with:
+          install-extras: 'dev docs'
+          verify-lock: 'true'
+
+      - name: Verify both extras installed
+        run: |
+          poetry run python -c "import pytest, sphinx"
+
+  groups-and-extras:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage fixture
+        run: |
+          cp tests/data/poetry/combined/pyproject.toml ./pyproject.toml
+          cp tests/data/poetry/combined/poetry.lock ./poetry.lock
+
+      - name: Run action
+        uses: ./actions/python-setup/poetry
+        with:
+          install-groups: 'dev'
+          install-extras: 'docs'
+          verify-lock: 'true'
+
+      - name: Verify both group and extra installed
+        run: |
+          poetry run python -c "import pytest, sphinx"
+
+  verify-lock-stale:
+    name: verify-lock with stale lock should fail
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage stale fixture
+        run: |
+          cp tests/data/poetry/stale/pyproject.toml ./pyproject.toml
+          cp tests/data/poetry/stale/poetry.lock ./poetry.lock
+
+      - name: Run action (expected to fail at verify-lock)
+        id: run
+        continue-on-error: true
+        uses: ./actions/python-setup/poetry
+        with:
+          verify-lock: 'true'
+
+      - name: Assert action failed
+        run: |
+          if [ "${{ steps.run.outcome }}" != "failure" ]; then
+            echo "::error::Expected action to fail on stale lock, but outcome was ${{ steps.run.outcome }}"
+            exit 1
+          fi
+          echo "Action correctly failed on stale lock"
+
+  verify-lock-disabled:
+    name: verify-lock=false works on healthy lock
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage fixture
+        run: |
+          cp tests/data/poetry/basic/pyproject.toml ./pyproject.toml
+          cp tests/data/poetry/basic/poetry.lock ./poetry.lock
+
+      - name: Run action with verify-lock disabled
+        uses: ./actions/python-setup/poetry
+        with:
+          install-groups: dev
+          verify-lock: 'false'
+
+      - name: Verify install proceeded
+        run: |
+          poetry run python -c "import pytest"
+
+  poetry-version-pin:
+    name: poetry-version pin honored
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage fixture
+        run: |
+          cp tests/data/poetry/defaults/pyproject.toml ./pyproject.toml
+          cp tests/data/poetry/defaults/poetry.lock ./poetry.lock
+
+      - name: Run action with pinned poetry version
+        uses: ./actions/python-setup/poetry
+        with:
+          poetry-version: '2.3.0'
+          verify-lock: 'true'
+
+      - name: Verify pinned poetry version active
+        run: |
+          INSTALLED=$(poetry --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+          echo "Installed poetry: $INSTALLED"
+          if [ "$INSTALLED" != "2.3.0" ]; then
+            echo "::error::Expected poetry 2.3.0, got $INSTALLED"
+            exit 1
+          fi

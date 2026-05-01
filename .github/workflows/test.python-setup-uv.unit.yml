@@ -6,81 +6,252 @@ on:
   workflow_dispatch:
 
 jobs:
-  test-setup-python-uv:
+  defaults:
+    name: defaults (no groups, no extras)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage fixture
+        run: |
+          cp tests/data/uv/defaults/pyproject.toml ./pyproject.toml
+          cp tests/data/uv/defaults/uv.lock ./uv.lock
+
+      - name: Run action
+        uses: ./actions/python-setup/uv
+        with:
+          verify-lock: 'true'
+
+      - name: Verify only main deps installed
+        run: |
+          uv pip list | grep -i requests
+          # Neither pytest nor sphinx should be present (no groups/extras requested)
+          if uv pip list | grep -iE '^(pytest|sphinx) '; then
+            echo "::error::Unexpected dependency installed when no groups/extras requested"
+            exit 1
+          fi
+
+  python-matrix:
+    name: python-matrix (single group)
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         python-version: ["3.12", "3.13"]
-        
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        
-      - name: Create test project
+      - uses: actions/checkout@v4
+
+      - name: Stage fixture
         run: |
-          cat > pyproject.toml << 'EOF'
-          [project]
-          name = "test"
-          version = "0.1.0"
-          dependencies = ["requests"]
-          
-          [dependency-groups]
-          dev = ["pytest"]
-          docs = ["sphinx"]
-          EOF
-          
-      - name: Generate uv.lock
-        run: |
-          pip install uv
-          uv lock
-          
-      - name: Test setup-python-uv action
+          cp tests/data/uv/basic/pyproject.toml ./pyproject.toml
+          cp tests/data/uv/basic/uv.lock ./uv.lock
+
+      - name: Run action
         uses: ./actions/python-setup/uv
         with:
           python-version: ${{ matrix.python-version }}
           install-groups: dev
-          verify-lock: 'false'
-        
-      - name: Verify Python version
+          verify-lock: 'true'
+
+      - name: Verify Python version + dev group installed
         run: |
-          python --version
           python -c "import sys; assert sys.version_info[:2] == tuple(map(int, '${{ matrix.python-version }}'.split('.')[:2]))"
-          
-      - name: Verify uv is installed
-        run: |
-          uv --version
-          
-  test-multiple-groups:
+          uv run python -c "import pytest; print('pytest', pytest.__version__)"
+
+  multi-groups-space:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        
-      - name: Create test project
+      - uses: actions/checkout@v4
+
+      - name: Stage fixture
         run: |
-          cat > pyproject.toml << 'EOF'
-          [project]
-          name = "test"
-          version = "0.1.0"
-          dependencies = ["requests"]
-          
-          [dependency-groups]
-          dev = ["pytest", "black"]
-          docs = ["sphinx", "mkdocs"]
-          test = ["coverage"]
-          EOF
-          
-      - name: Generate uv.lock for multiple groups test
-        run: |
-          pip install uv
-          uv lock
-          
-      - name: Test multiple groups
+          cp tests/data/uv/multi-groups/pyproject.toml ./pyproject.toml
+          cp tests/data/uv/multi-groups/uv.lock ./uv.lock
+
+      - name: Run action
         uses: ./actions/python-setup/uv
         with:
-          install-groups: dev docs test
-          verify-lock: 'false'
-          
-      - name: Verify installation worked
+          install-groups: 'dev docs test'
+          verify-lock: 'true'
+
+      - name: Verify all three groups installed
         run: |
-          uv pip list
+          uv run python -c "import pytest, black, sphinx, mkdocs, coverage"
+
+  multi-groups-comma:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage fixture
+        run: |
+          cp tests/data/uv/multi-groups/pyproject.toml ./pyproject.toml
+          cp tests/data/uv/multi-groups/uv.lock ./uv.lock
+
+      - name: Run action
+        uses: ./actions/python-setup/uv
+        with:
+          install-groups: 'dev,docs,test'
+          verify-lock: 'true'
+
+      - name: Verify all three groups installed
+        run: |
+          uv run python -c "import pytest, black, sphinx, mkdocs, coverage"
+
+  single-extra:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage fixture
+        run: |
+          cp tests/data/uv/extras/pyproject.toml ./pyproject.toml
+          cp tests/data/uv/extras/uv.lock ./uv.lock
+
+      - name: Run action
+        uses: ./actions/python-setup/uv
+        with:
+          install-extras: 'docs'
+          verify-lock: 'true'
+
+      - name: Verify only docs extra installed
+        run: |
+          uv run python -c "import sphinx"
+          if uv run python -c "import pytest" 2>/dev/null; then
+            echo "::error::pytest extra should NOT be installed"
+            exit 1
+          fi
+
+  multi-extras-comma:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage fixture
+        run: |
+          cp tests/data/uv/extras/pyproject.toml ./pyproject.toml
+          cp tests/data/uv/extras/uv.lock ./uv.lock
+
+      - name: Run action
+        uses: ./actions/python-setup/uv
+        with:
+          install-extras: 'dev,docs'
+          verify-lock: 'true'
+
+      - name: Verify both extras installed
+        run: |
+          uv run python -c "import pytest, sphinx"
+
+  multi-extras-space:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage fixture
+        run: |
+          cp tests/data/uv/extras/pyproject.toml ./pyproject.toml
+          cp tests/data/uv/extras/uv.lock ./uv.lock
+
+      - name: Run action
+        uses: ./actions/python-setup/uv
+        with:
+          install-extras: 'dev docs'
+          verify-lock: 'true'
+
+      - name: Verify both extras installed
+        run: |
+          uv run python -c "import pytest, sphinx"
+
+  groups-and-extras:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage fixture
+        run: |
+          cp tests/data/uv/combined/pyproject.toml ./pyproject.toml
+          cp tests/data/uv/combined/uv.lock ./uv.lock
+
+      - name: Run action
+        uses: ./actions/python-setup/uv
+        with:
+          install-groups: 'dev'
+          install-extras: 'docs'
+          verify-lock: 'true'
+
+      - name: Verify both group and extra installed
+        run: |
+          uv run python -c "import pytest, sphinx"
+
+  verify-lock-stale:
+    name: verify-lock with stale lock should fail
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage stale fixture
+        run: |
+          cp tests/data/uv/stale/pyproject.toml ./pyproject.toml
+          cp tests/data/uv/stale/uv.lock ./uv.lock
+
+      - name: Run action (expected to fail at verify-lock)
+        id: run
+        continue-on-error: true
+        uses: ./actions/python-setup/uv
+        with:
+          verify-lock: 'true'
+
+      - name: Assert action failed
+        run: |
+          if [ "${{ steps.run.outcome }}" != "failure" ]; then
+            echo "::error::Expected action to fail on stale lock, but outcome was ${{ steps.run.outcome }}"
+            exit 1
+          fi
+          echo "Action correctly failed on stale lock"
+
+  verify-lock-disabled:
+    name: verify-lock=false works on healthy lock
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage fixture
+        run: |
+          cp tests/data/uv/basic/pyproject.toml ./pyproject.toml
+          cp tests/data/uv/basic/uv.lock ./uv.lock
+
+      - name: Run action with verify-lock disabled
+        uses: ./actions/python-setup/uv
+        with:
+          install-groups: dev
+          verify-lock: 'false'
+
+      - name: Verify install proceeded
+        run: |
+          uv run python -c "import pytest"
+
+  uv-version-pin:
+    name: uv-version pin honored
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage fixture
+        run: |
+          cp tests/data/uv/defaults/pyproject.toml ./pyproject.toml
+          cp tests/data/uv/defaults/uv.lock ./uv.lock
+
+      - name: Run action with pinned uv version
+        uses: ./actions/python-setup/uv
+        with:
+          uv-version: '0.9.5'
+          verify-lock: 'true'
+
+      - name: Verify pinned uv version active
+        run: |
+          INSTALLED=$(uv --version | awk '{print $2}')
+          echo "Installed uv: $INSTALLED"
+          if [ "$INSTALLED" != "0.9.5" ]; then
+            echo "::error::Expected uv 0.9.5, got $INSTALLED"
+            exit 1
+          fi
