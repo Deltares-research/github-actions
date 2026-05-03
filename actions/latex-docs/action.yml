@@ -68,11 +68,27 @@ runs:
         pandoc --version
         echo "::endgroup::"
 
-    - name: Setup Python Environment
+    # Python environment setup — delegated to actions/python-setup/<pm>
+    - name: Setup Python with uv
+      if: inputs.package-manager == 'uv'
       uses: Deltares-research/github-actions/actions/python-setup/uv@main
       with:
         python-version: ${{ inputs.python-version }}
         install-groups: ${{ inputs.dependency-groups }}
+        verify-lock: 'false'
+
+    - name: Setup Python with Poetry
+      if: inputs.package-manager == 'poetry'
+      uses: Deltares-research/github-actions/actions/python-setup/poetry@main
+      with:
+        python-version: ${{ inputs.python-version }}
+        install-groups: ${{ inputs.dependency-groups }}
+        verify-lock: 'false'
+
+    - name: Setup Python with Pixi
+      if: inputs.package-manager == 'pixi'
+      uses: Deltares-research/github-actions/actions/python-setup/pixi@main
+      with:
         verify-lock: 'false'
 
     - name: Checkout Deltares LaTeX Styles

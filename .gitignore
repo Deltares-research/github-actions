@@ -31,6 +31,9 @@ ENV/
 env.bak/
 venv.bak/
 
+# pixi work dirs (created by `pixi install` in fixture dirs)
+.pixi/
+
 # IDEs
 .vscode/
 .idea/
