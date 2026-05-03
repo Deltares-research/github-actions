@@ -1,16 +1,28 @@
-name: 'Deploy MkDocs to GitHub Pages'
-description: 'Deploy MkDocs documentation to GitHub Pages using mike for versioning'
+name: 'Complete MkDocs Deploy'
+description: 'Stand-alone MkDocs workflow - sets up Python via actions/python-setup, then deploys docs to GitHub Pages with mike'
 
 inputs:
+  python-version:
+    description: 'Python version to install'
+    required: false
+    default: '3.12'
   package-manager:
-    description: 'Package manager used (uv, poetry, pixi)'
+    description: 'Package manager to use (uv, poetry, pixi)'
     required: false
     default: 'uv'
+  dependency-groups:
+    description: 'Dependency groups to install (uv --group / poetry --with). Space- or comma-separated.'
+    required: false
+    default: 'docs'
+  poetry-extras:
+    description: 'Poetry extras to install (--extras). When set, dependency-groups is ignored for poetry to preserve previous behavior.'
+    required: false
+    default: ''
+  deploy-types:
+    description: 'Comma-separated list of deploy types to run (pr, main, release)'
+    required: true
   deploy-token:
     description: 'GitHub token for deployment'
-    required: true
-  deploy-type:
-    description: 'Type of deployment (pr, main, release)'
     required: true
   release-tag:
     description: 'Release tag for version deployment'
@@ -20,6 +32,43 @@ inputs:
 runs:
   using: 'composite'
   steps:
+    - name: Log deployment configuration
+      shell: bash
+      run: |
+        echo "::group::MkDocs Deployment Configuration"
+        echo "Python version: ${{ inputs.python-version }}"
+        echo "Package manager: ${{ inputs.package-manager }}"
+        echo "Dependency groups: ${{ inputs.dependency-groups }}"
+        echo "Poetry extras: ${{ inputs.poetry-extras }}"
+        echo "Deploy types: ${{ inputs.deploy-types }}"
+        echo "Event name: ${{ github.event_name }}"
+        echo "Ref: ${{ github.ref }}"
+        echo "::endgroup::"
+
+    # Python environment setup — delegated to actions/python-setup/<pm>
+    - name: Setup Python with uv
+      if: inputs.package-manager == 'uv'
+      uses: Deltares-research/github-actions/actions/python-setup/uv@main
+      with:
+        python-version: ${{ inputs.python-version }}
+        install-groups: ${{ inputs.dependency-groups }}
+        install-extras: ${{ inputs.poetry-extras }}
+
+    - name: Setup Python with Poetry
+      if: inputs.package-manager == 'poetry'
+      uses: Deltares-research/github-actions/actions/python-setup/poetry@main
+      with:
+        python-version: ${{ inputs.python-version }}
+        install-groups: ${{ inputs.poetry-extras == '' && inputs.dependency-groups || '' }}
+        install-extras: ${{ inputs.poetry-extras }}
+
+    - name: Setup Python with Pixi
+      if: inputs.package-manager == 'pixi'
+      uses: Deltares-research/github-actions/actions/python-setup/pixi@main
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    # Configure git so mike can push to gh-pages
     - name: Configure git
       shell: bash
       run: |
@@ -29,8 +78,8 @@ runs:
         echo "Git configured for user: ${{ github.actor }}"
         echo "::endgroup::"
 
-    - name: Deploy to GitHub Pages (Pull Request)
-      if: inputs.deploy-type == 'pr'
+    - name: Deploy PR Documentation
+      if: contains(inputs.deploy-types, 'pr') && github.event_name == 'pull_request'
       shell: bash
       env:
         ACTIONS_DEPLOY_TOKEN: ${{ inputs.deploy-token }}
@@ -53,8 +102,8 @@ runs:
         esac
         echo "::endgroup::"
 
-    - name: Deploy to GitHub Pages (Main)
-      if: inputs.deploy-type == 'main'
+    - name: Deploy Main Documentation
+      if: contains(inputs.deploy-types, 'main') && github.event_name == 'push' && github.ref == 'refs/heads/main'
       shell: bash
       env:
         ACTIONS_DEPLOY_TOKEN: ${{ inputs.deploy-token }}
@@ -89,8 +138,8 @@ runs:
         esac
         echo "::endgroup::"
 
-    - name: Deploy to GitHub Pages (Release)
-      if: inputs.deploy-type == 'release'
+    - name: Deploy Release Documentation
+      if: contains(inputs.deploy-types, 'release') && github.event_name == 'release'
       shell: bash
       env:
         ACTIONS_DEPLOY_TOKEN: ${{ inputs.deploy-token }}
