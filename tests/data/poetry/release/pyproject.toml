@@ -1,0 +1,23 @@
+[tool.poetry]
+name = "test-release-integration"
+version = "0.1.0"
+description = "Integration test fixture for the release action (poetry)"
+authors = ["Test <test@example.com>"]
+packages = [{ include = "test_release_integration" }]
+
+[tool.poetry.dependencies]
+python = "^3.12"
+
+[tool.poetry.group.dev.dependencies]
+commitizen = "^3.0.0"
+
+[tool.commitizen]
+name = "cz_conventional_commits"
+version = "0.1.0"
+tag_format = "$version"
+version_files = ["pyproject.toml:version"]
+update_changelog_on_bump = true
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

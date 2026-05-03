@@ -1,0 +1,13 @@
+[project]
+name = "test-release-integration"
+channels = ["conda-forge"]
+platforms = ["linux-64"]
+
+[dependencies]
+python = "3.12.*"
+
+[feature.dev.dependencies]
+commitizen = ">=3.0.0"
+
+[environments]
+default = ["dev"]

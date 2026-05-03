@@ -1,0 +1,20 @@
+[project]
+name = "test-release-integration"
+version = "0.1.0"
+description = "Integration test fixture for the release action (pixi)"
+requires-python = ">=3.12"
+dependencies = []
+
+[tool.commitizen]
+name = "cz_conventional_commits"
+version = "0.1.0"
+tag_format = "$version"
+version_files = ["pyproject.toml:version"]
+update_changelog_on_bump = true
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["test_release_integration"]
