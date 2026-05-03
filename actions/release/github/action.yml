@@ -1,0 +1,435 @@
+name: 'Python Package Release'
+description: 'Complete automated release workflow for Python packages with version bumping, changelog generation, and GitHub release creation'
+
+inputs:
+  release-branch:
+    description: 'Branch to create release from'
+    required: false
+    default: 'main'
+  increment:
+    description: |
+      Version increment type used by commitizen for semantic versioning. Required.
+      - patch: Bug fixes (1.0.0 -> 1.0.1)
+      - minor: New features (1.0.1 -> 1.1.0)
+      - major: Breaking changes (1.1.0 -> 2.0.0)
+    required: true
+  prerelease-type:
+    description: |
+      Prerelease type appended to the version (forwarded to commitizen --prerelease).
+      - none: Standard release (1.0.0)
+      - alpha: Alpha release (1.0.0-alpha.1)
+      - beta: Beta release (1.0.0-beta.1)
+      - rc: Release candidate (1.0.0-rc.1)
+    required: false
+    default: 'none'
+  draft:
+    description: 'Create the GitHub release as a draft (true/false).'
+    required: false
+    default: 'false'
+  config-file:
+    description: |
+      Path to a commitizen configuration file (pyproject.toml). Useful in monorepos
+      where each package has its own commitizen config; commitizen and the lock-file
+      update will be run from the directory containing this file. Leave empty to
+      use the repository root pyproject.toml.
+    required: false
+    default: ''
+  python-version:
+    description: 'Python version to install'
+    required: false
+    default: '3.12'
+  package-manager:
+    description: 'Package manager (uv, poetry, pixi)'
+    required: false
+    default: 'uv'
+  dependency-groups:
+    description: 'Dependency groups to install. Forwarded to install-groups for uv/poetry. Ignored for pixi (pixi installs from manifest). Space- or comma-separated.'
+    required: false
+    default: 'dev docs'
+  install-extras:
+    description: 'Optional-dependency extras to install via uv sync --extra (uv only). Space- or comma-separated.'
+    required: false
+    default: ''
+  poetry-extras:
+    description: 'Poetry extras to install via poetry install --extras (poetry only). Space- or comma-separated.'
+    required: false
+    default: ''
+  pixi-environments:
+    description: 'Pixi environments to install (pixi only; passed through to setup-pixi). Empty means the default environment.'
+    required: false
+    default: ''
+  pixi-activate-environment:
+    description: 'Pixi environment to activate on PATH after install (pixi only). Must also be listed in pixi-environments.'
+    required: false
+    default: ''
+  verify-lock:
+    description: 'Whether to verify the lock file is up to date before installing dependencies.'
+    required: false
+    default: 'true'
+  github-token:
+    description: 'GitHub token for API calls and releases'
+    required: true
+  check-admin-permissions:
+    description: 'Whether to check if user has admin permissions'
+    required: false
+    default: 'true'
+  build-wheel:
+    description: 'Whether to build and include wheel in release'
+    required: false
+    default: 'true'
+  skip-github-release:
+    description: |
+      Skip creating the GitHub release via API. FOR TESTING ONLY.
+      When 'true', the action bumps the version and pushes tags but does NOT
+      call the GitHub Releases API.
+    required: false
+    default: 'false'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Check User Permissions
+      if: inputs.check-admin-permissions == 'true'
+      shell: bash
+      run: |
+        echo "::group::Checking User Permissions"
+        echo "Checking if user ${{ github.actor }} has admin permissions..."
+
+        PERMISSION=$(curl -s -H "Authorization: token ${{ inputs.github-token }}" \
+          "https://api.github.com/repos/${{ github.repository }}/collaborators/${{ github.actor }}/permission" \
+          | jq -r '.permission // "none"')
+
+        echo "User permission level: $PERMISSION"
+
+        if [ "$PERMISSION" != "admin" ]; then
+          echo "::error::Access denied. Only repository administrators can trigger releases."
+          echo "::error::User '${{ github.actor }}' has '$PERMISSION' permissions, but 'admin' is required."
+          exit 1
+        fi
+
+        echo "Permission check passed. User has admin access."
+        echo "::endgroup::"
+
+    - name: Setup Python Environment (uv)
+      if: inputs.package-manager == 'uv'
+      uses: Deltares-research/github-actions/actions/python-setup/uv@main
+      with:
+        python-version: ${{ inputs.python-version }}
+        install-groups: ${{ inputs.dependency-groups }}
+        install-extras: ${{ inputs.install-extras }}
+        verify-lock: ${{ inputs.verify-lock }}
+
+    - name: Setup Python Environment (poetry)
+      if: inputs.package-manager == 'poetry'
+      uses: Deltares-research/github-actions/actions/python-setup/poetry@main
+      with:
+        python-version: ${{ inputs.python-version }}
+        install-groups: ${{ inputs.dependency-groups }}
+        install-extras: ${{ inputs.poetry-extras }}
+        verify-lock: ${{ inputs.verify-lock }}
+
+    - name: Setup Python Environment (pixi)
+      if: inputs.package-manager == 'pixi'
+      uses: Deltares-research/github-actions/actions/python-setup/pixi@main
+      with:
+        environments: ${{ inputs.pixi-environments }}
+        activate-environment: ${{ inputs.pixi-activate-environment }}
+        verify-lock: ${{ inputs.verify-lock }}
+
+    - name: Configure Git
+      shell: bash
+      run: |
+        echo "::group::Configuring Git for version bump"
+        git config --global user.name '${{ github.actor }}'
+        git config --global user.email '${{ github.actor }}@users.noreply.github.com'
+        echo "Git configured with user: ${{ github.actor }}"
+        echo "::endgroup::"
+
+    - name: Validate changelog file
+      shell: bash
+      env:
+        PM: ${{ inputs.package-manager }}
+        CONFIG_FILE: ${{ inputs.config-file }}
+        PIXI_ENV: ${{ inputs.pixi-activate-environment }}
+      run: |
+        echo "::group::Validating changelog file"
+
+        if [ -n "$CONFIG_FILE" ]; then
+          WORK_DIR=$(dirname "$CONFIG_FILE")
+        else
+          WORK_DIR="."
+        fi
+        echo "Working directory: $WORK_DIR"
+        cd "$WORK_DIR"
+
+        CHANGELOG_FILE=""
+        if [ -f "pyproject.toml" ]; then
+          CHANGELOG_FILE=$(grep -A 20 "^\[tool\.commitizen\]" pyproject.toml | grep "^changelog_file" | head -1 | sed 's/.*=\s*"\(.*\)"/\1/' || true)
+        fi
+        if [ -z "$CHANGELOG_FILE" ]; then
+          CHANGELOG_FILE="CHANGELOG.md"
+        fi
+        echo "Changelog file: $CHANGELOG_FILE"
+
+        if [ ! -f "$CHANGELOG_FILE" ]; then
+          echo "::error::Changelog file not found: $CHANGELOG_FILE"
+          echo "::error::A changelog file is required for release generation."
+          echo "::error::Please create $CHANGELOG_FILE or run 'cz changelog' from $WORK_DIR"
+          exit 1
+        fi
+
+        echo "Changelog file exists: $CHANGELOG_FILE"
+        echo "::endgroup::"
+
+    - name: Generate changelog and bump version with commitizen
+      id: bump_version
+      shell: bash
+      env:
+        PM: ${{ inputs.package-manager }}
+        INCREMENT: ${{ inputs.increment }}
+        PRERELEASE_TYPE: ${{ inputs.prerelease-type }}
+        CONFIG_FILE: ${{ inputs.config-file }}
+        PIXI_ENV: ${{ inputs.pixi-activate-environment }}
+      run: |
+        echo "::group::Preparing commitizen command"
+
+        # Build CZ_CMD based on package manager
+        if [ "$PM" = "pixi" ]; then
+          if [ -n "$PIXI_ENV" ]; then
+            CZ_CMD=(pixi run -e "$PIXI_ENV" cz)
+          else
+            CZ_CMD=(pixi run cz)
+          fi
+        else
+          CZ_CMD=("$PM" run cz)
+        fi
+        echo "Commitizen command: ${CZ_CMD[*]}"
+        echo "::endgroup::"
+
+        if [ -n "$CONFIG_FILE" ]; then
+          WORK_DIR=$(dirname "$CONFIG_FILE")
+        else
+          WORK_DIR="."
+        fi
+        echo "Working directory: $WORK_DIR"
+        cd "$WORK_DIR"
+
+        # Re-resolve changelog file (needed for the recovery path below)
+        CHANGELOG_FILE=""
+        if [ -f "pyproject.toml" ]; then
+          CHANGELOG_FILE=$(grep -A 20 "^\[tool\.commitizen\]" pyproject.toml | grep "^changelog_file" | head -1 | sed 's/.*=\s*"\(.*\)"/\1/' || true)
+        fi
+        if [ -z "$CHANGELOG_FILE" ]; then
+          CHANGELOG_FILE="CHANGELOG.md"
+        fi
+
+        echo "::group::Getting current version"
+        CURRENT_VERSION=$("${CZ_CMD[@]}" version --project)
+        echo "Current version: $CURRENT_VERSION"
+        echo "::endgroup::"
+
+        echo "::group::Calculating next version (dry-run)"
+        echo "Increment type: $INCREMENT"
+        if [ "$PRERELEASE_TYPE" != "none" ]; then
+          echo "Prerelease type: $PRERELEASE_TYPE"
+          NEXT_VERSION=$("${CZ_CMD[@]}" bump --dry-run --yes --increment "$INCREMENT" --prerelease "$PRERELEASE_TYPE" | grep "tag to create" | awk '{print $NF}')
+        else
+          NEXT_VERSION=$("${CZ_CMD[@]}" bump --dry-run --yes --increment "$INCREMENT" | grep "tag to create" | awk '{print $NF}')
+        fi
+        if [ -z "$NEXT_VERSION" ]; then
+          echo "::error::commitizen dry-run did not return a next version."
+          exit 1
+        fi
+        echo "Next version: $NEXT_VERSION"
+        echo "Version change: $CURRENT_VERSION -> $NEXT_VERSION"
+        echo "::endgroup::"
+
+        echo "::group::Bumping version and generating changelog"
+        # cz bump handles changelog generation when update_changelog_on_bump = true.
+        # If it fails, we recover by regenerating the full changelog and retrying with --files-only.
+        set +e
+        if [ "$PRERELEASE_TYPE" != "none" ]; then
+          "${CZ_CMD[@]}" bump --yes --increment "$INCREMENT" --prerelease "$PRERELEASE_TYPE"
+          BUMP_EXIT_CODE=$?
+        else
+          "${CZ_CMD[@]}" bump --yes --increment "$INCREMENT"
+          BUMP_EXIT_CODE=$?
+        fi
+        set -e
+
+        if [ $BUMP_EXIT_CODE -ne 0 ]; then
+          echo "cz bump failed (exit code: $BUMP_EXIT_CODE). Recovering..."
+
+          git checkout -- "$CHANGELOG_FILE"
+          "${CZ_CMD[@]}" changelog --unreleased-version="$NEXT_VERSION"
+
+          # cz bump --files-only still triggers an incremental changelog update when
+          # update_changelog_on_bump = true, which now fails because the unreleased
+          # section already exists from the full regen above. Toggle the setting off
+          # for the retry, then restore it.
+          TOGGLED_CL=false
+          if grep -qE '^update_changelog_on_bump\s*=\s*true' pyproject.toml; then
+            sed -i -E 's/^update_changelog_on_bump\s*=\s*true/update_changelog_on_bump = false/' pyproject.toml
+            TOGGLED_CL=true
+          fi
+
+          if [ "$PRERELEASE_TYPE" != "none" ]; then
+            "${CZ_CMD[@]}" bump --yes --increment "$INCREMENT" --prerelease "$PRERELEASE_TYPE" --files-only
+          else
+            "${CZ_CMD[@]}" bump --yes --increment "$INCREMENT" --files-only
+          fi
+
+          if [ "$TOGGLED_CL" = "true" ]; then
+            sed -i -E 's/^update_changelog_on_bump\s*=\s*false/update_changelog_on_bump = true/' pyproject.toml
+          fi
+          echo "Recovery successful"
+        fi
+        echo "::endgroup::"
+
+        echo "::group::Verifying tag"
+        if git rev-parse "$NEXT_VERSION" >/dev/null 2>&1; then
+          echo "Tag verified: $NEXT_VERSION"
+        else
+          echo "::warning::Tag not found in git: $NEXT_VERSION"
+        fi
+        echo "NEW_VERSION=$NEXT_VERSION" >> $GITHUB_OUTPUT
+        echo "CHANGELOG_FILE=$CHANGELOG_FILE" >> $GITHUB_OUTPUT
+        echo "WORK_DIR=$WORK_DIR" >> $GITHUB_OUTPUT
+        echo "::endgroup::"
+
+    - name: Update lock file (uv)
+      if: inputs.package-manager == 'uv'
+      shell: bash
+      env:
+        WORK_DIR: ${{ steps.bump_version.outputs.WORK_DIR }}
+      run: |
+        echo "::group::Updating uv.lock after version bump"
+        cd "$WORK_DIR"
+        uv lock
+        git add uv.lock
+        git commit -m "chore: update lock file after version bump" || echo "No lock file changes to commit"
+        echo "::endgroup::"
+
+    - name: Update lock file (poetry)
+      if: inputs.package-manager == 'poetry'
+      shell: bash
+      env:
+        WORK_DIR: ${{ steps.bump_version.outputs.WORK_DIR }}
+      run: |
+        echo "::group::Updating poetry.lock after version bump"
+        cd "$WORK_DIR"
+        poetry lock
+        git add poetry.lock
+        git commit -m "chore: update lock file after version bump" || echo "No lock file changes to commit"
+        echo "::endgroup::"
+
+    - name: Update lock file (pixi)
+      if: inputs.package-manager == 'pixi'
+      shell: bash
+      env:
+        WORK_DIR: ${{ steps.bump_version.outputs.WORK_DIR }}
+      run: |
+        echo "::group::Updating pixi.lock after version bump"
+        cd "$WORK_DIR"
+        pixi install
+        git add pixi.lock
+        git commit -m "chore: update lock file after version bump" || echo "No lock file changes to commit"
+        echo "::endgroup::"
+
+    - name: Push changes and tags
+      shell: bash
+      run: |
+        echo "::group::Pushing changes and tags"
+        if ! git push; then
+          echo "::error::Failed to push changes to repository"
+          exit 1
+        fi
+        if ! git push --tags; then
+          echo "::error::Failed to push tags to repository"
+          exit 1
+        fi
+        echo "Tag pushed: ${{ steps.bump_version.outputs.NEW_VERSION }}"
+        echo "::endgroup::"
+
+    - name: Build Wheel (uv/poetry)
+      if: inputs.build-wheel == 'true' && (inputs.package-manager == 'uv' || inputs.package-manager == 'poetry')
+      shell: bash
+      env:
+        PM: ${{ inputs.package-manager }}
+        WORK_DIR: ${{ steps.bump_version.outputs.WORK_DIR }}
+      run: |
+        echo "::group::Building Wheel with $PM"
+        cd "$WORK_DIR"
+        "$PM" build
+        echo "WHEEL_PATH=$WORK_DIR/$(ls -t dist/*.whl | head -n 1)" >> $GITHUB_ENV
+        echo "::endgroup::"
+
+    - name: Build Wheel (pixi)
+      if: inputs.build-wheel == 'true' && inputs.package-manager == 'pixi'
+      shell: bash
+      env:
+        WORK_DIR: ${{ steps.bump_version.outputs.WORK_DIR }}
+      run: |
+        echo "::group::Building Wheel with pixi"
+        cd "$WORK_DIR"
+        pixi run python -m build
+        echo "WHEEL_PATH=$WORK_DIR/$(ls -t dist/*.whl | head -n 1)" >> $GITHUB_ENV
+        echo "::endgroup::"
+
+    - name: Extract release notes from changelog
+      id: release_notes
+      shell: bash
+      env:
+        VERSION: ${{ steps.bump_version.outputs.NEW_VERSION }}
+        CHANGELOG_FILE: ${{ steps.bump_version.outputs.CHANGELOG_FILE }}
+        WORK_DIR: ${{ steps.bump_version.outputs.WORK_DIR }}
+      run: |
+        echo "::group::Extracting release notes for $VERSION"
+        cd "$WORK_DIR"
+
+        ESCAPED_VERSION=$(echo "$VERSION" | sed 's/\./\\./g')
+
+        BODY=$(awk "
+          /^## .*${ESCAPED_VERSION}/ { found=1; next }
+          found && /^## / { exit }
+          found { print }
+        " "$CHANGELOG_FILE")
+
+        if [ -z "$BODY" ]; then
+          echo "::warning::Could not extract release notes for $VERSION; falling back to a placeholder body"
+          BODY="Release $VERSION"
+        fi
+
+        echo "body<<RELEASE_NOTES_EOF" >> $GITHUB_OUTPUT
+        echo "$BODY" >> $GITHUB_OUTPUT
+        echo "RELEASE_NOTES_EOF" >> $GITHUB_OUTPUT
+        echo "::endgroup::"
+
+    - name: Publish GitHub Release
+      if: inputs.skip-github-release != 'true'
+      uses: softprops/action-gh-release@v2
+      with:
+        token: ${{ inputs.github-token }}
+        name: ${{ steps.bump_version.outputs.NEW_VERSION }}
+        tag_name: ${{ steps.bump_version.outputs.NEW_VERSION }}
+        body: ${{ steps.release_notes.outputs.body }}
+        draft: ${{ inputs.draft == 'true' }}
+        prerelease: ${{ contains(steps.bump_version.outputs.NEW_VERSION, 'alpha') || contains(steps.bump_version.outputs.NEW_VERSION, 'beta') || contains(steps.bump_version.outputs.NEW_VERSION, 'rc') }}
+        files: ${{ inputs.build-wheel == 'true' && env.WHEEL_PATH || '' }}
+
+    - name: Release summary
+      shell: bash
+      run: |
+        echo "::group::Release Summary"
+        echo "Version:   ${{ steps.bump_version.outputs.NEW_VERSION }}"
+        echo "Increment: ${{ inputs.increment }}"
+        if [ "${{ inputs.prerelease-type }}" != "none" ]; then
+          echo "Prerelease: ${{ inputs.prerelease-type }}"
+        fi
+        if [ "${{ inputs.draft }}" = "true" ]; then
+          echo "Status:    Draft"
+        else
+          echo "Status:    Published"
+        fi
+        echo "View: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ steps.bump_version.outputs.NEW_VERSION }}"
+        echo "::endgroup::"
