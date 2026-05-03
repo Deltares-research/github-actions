@@ -1,0 +1,55 @@
+name: 'Setup Fake Git Remote'
+description: |
+  Configure a local bare git repo as `origin` so test workflows that exercise
+  the release action (or any action that pushes commits and tags) do not write
+  to the real GitHub remote. Also bootstraps a `gh-pages` branch in the fake
+  remote so docs-deploy tests have something to push against.
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup fake git remote
+      shell: bash
+      run: |
+        echo "::group::Configuring fake git remote"
+
+        # Default git identity used until the action under test reconfigures it.
+        git config --global user.email "test@example.com"
+        git config --global user.name "Test User"
+
+        # Create a bare repository to act as the fake remote.
+        FAKE_REMOTE=/tmp/fake-remote.git
+        rm -rf "$FAKE_REMOTE"
+        mkdir -p "$FAKE_REMOTE"
+        git -C "$FAKE_REMOTE" init --bare
+
+        # Repoint origin at the bare repo. After this step, every `git push`
+        # in the workflow lands in /tmp/fake-remote.git instead of GitHub.
+        cd "$GITHUB_WORKSPACE"
+        git remote set-url origin "file://$FAKE_REMOTE"
+        echo "origin is now: $(git remote get-url origin)"
+
+        # Remember the branch we were on so we can return after seeding gh-pages.
+        CURRENT_BRANCH=$(git branch --show-current)
+
+        # Seed a gh-pages branch in the fake remote so mkdocs-deploy tests have
+        # an existing branch to push into. Harmless for release tests.
+        git checkout --orphan gh-pages-temp
+        git rm -rf . >/dev/null 2>&1 || true
+        echo "# Test docs (fake remote seed)" > README.md
+        git add README.md
+        git commit -m "chore: seed gh-pages on fake remote"
+        git push origin gh-pages-temp:gh-pages
+
+        # Return to the original branch.
+        if [ -n "$CURRENT_BRANCH" ]; then
+          git checkout "$CURRENT_BRANCH"
+        else
+          git checkout main 2>/dev/null || git checkout master
+        fi
+
+        # Drop the temporary local branch we used to seed gh-pages.
+        git branch -D gh-pages-temp >/dev/null 2>&1 || true
+
+        echo "Fake remote ready at $FAKE_REMOTE"
+        echo "::endgroup::"
