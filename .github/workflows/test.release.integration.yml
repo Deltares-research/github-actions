@@ -1,0 +1,444 @@
+name: Integration Test - Release Action
+
+on:
+  pull_request:
+    paths:
+      - 'actions/release/**'
+      - '.github/workflows/test.release.integration.yml'
+      - '.github/workflows/test-helpers/**'
+  workflow_dispatch:
+
+# All pushes/tags created by these jobs go to a fake bare git repo at
+# /tmp/fake-remote.git (set up by .github/workflows/test-helpers/setup-fake-remote),
+# so they never touch the real GitHub remote. This means we don't need a
+# cleanup step and the test can run safely on push/PR triggers.
+permissions:
+  contents: read
+
+jobs:
+  test-release-uv-poetry:
+    name: Test release - ${{ matrix.package-manager }} (${{ matrix.increment }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package-manager: [uv, poetry]
+        increment: [patch, minor, major]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # NOTE: per CLAUDE.md "Test Fixtures (rule)", these heredoc-inlined
+      # fixtures should be replaced by committed files under
+      # tests/data/<pm>/release/{pyproject.toml,<lock>}. Tracked as follow-up.
+      - name: Stage test fixture (uv)
+        if: matrix.package-manager == 'uv'
+        run: |
+          cat > pyproject.toml << 'EOF'
+          [project]
+          name = "test-release-integration"
+          version = "0.1.0"
+          description = "Integration test for release action"
+          readme = "README.md"
+          requires-python = ">=3.12"
+          dependencies = []
+
+          [dependency-groups]
+          dev = ["commitizen>=3.0.0"]
+
+          [tool.commitizen]
+          name = "cz_conventional_commits"
+          version = "0.1.0"
+          tag_format = "$version"
+          version_files = ["pyproject.toml:version"]
+          update_changelog_on_bump = true
+
+          [build-system]
+          requires = ["setuptools>=61.0"]
+          build-backend = "setuptools.build_meta"
+          EOF
+
+          mkdir -p test_release_integration
+          touch test_release_integration/__init__.py
+
+      - name: Stage test fixture (poetry)
+        if: matrix.package-manager == 'poetry'
+        run: |
+          cat > pyproject.toml << 'EOF'
+          [tool.poetry]
+          name = "test-release-integration"
+          version = "0.1.0"
+          description = "Integration test for release action"
+          authors = ["Test <test@example.com>"]
+          readme = "README.md"
+
+          [tool.poetry.dependencies]
+          python = "^3.12"
+
+          [tool.poetry.group.dev.dependencies]
+          commitizen = "^3.0.0"
+
+          [tool.commitizen]
+          name = "cz_conventional_commits"
+          version = "0.1.0"
+          tag_format = "$version"
+          version_files = ["pyproject.toml:version"]
+          update_changelog_on_bump = true
+
+          [build-system]
+          requires = ["poetry-core"]
+          build-backend = "poetry.core.masonry.api"
+          EOF
+
+          mkdir -p test_release_integration
+          touch test_release_integration/__init__.py
+
+      - name: Generate lock file (uv)
+        if: matrix.package-manager == 'uv'
+        run: |
+          pip install uv
+          uv lock
+
+      - name: Generate lock file (poetry)
+        if: matrix.package-manager == 'poetry'
+        run: |
+          pip install poetry
+          poetry lock
+
+      - name: Clean up repository tags
+        run: |
+          # Delete tags inherited from the real repo so commitizen sees only
+          # the tags we create below for the test fixture.
+          git tag -l | xargs -r git tag -d
+
+      - name: Setup fake git remote
+        uses: ./.github/workflows/test-helpers/setup-fake-remote
+
+      - name: Seed test history
+        env:
+          PM: ${{ matrix.package-manager }}
+          INCREMENT: ${{ matrix.increment }}
+        run: |
+          git config user.name "Test Bot"
+          git config user.email "test@example.com"
+
+          cat > CHANGELOG.md << 'EOF'
+          # Changelog
+
+          All notable changes to this project will be documented in this file.
+          EOF
+
+          if [ "$PM" = "uv" ]; then
+            git add pyproject.toml uv.lock CHANGELOG.md test_release_integration
+          else
+            git add pyproject.toml poetry.lock CHANGELOG.md test_release_integration
+          fi
+          git commit -m "chore: initial commit"
+          git tag 0.1.0
+          git push origin "$(git branch --show-current)"
+          git push origin 0.1.0
+
+          # Conventional commit so cz has something to bump from. The commit
+          # type is chosen to match the requested increment so the bump succeeds
+          # whichever way commitizen interprets --increment.
+          case "$INCREMENT" in
+            patch) MSG="fix: small bug for patch test" ;;
+            minor) MSG="feat: new feature for minor test" ;;
+            major) MSG="feat!: breaking change for major test" ;;
+          esac
+          echo "# test" > README.md
+          git add README.md
+          git commit -m "$MSG"
+          git push origin "$(git branch --show-current)"
+
+      - name: Run release action
+        uses: ./actions/release/github
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          increment: ${{ matrix.increment }}
+          package-manager: ${{ matrix.package-manager }}
+          python-version: '3.12'
+          dependency-groups: 'dev'
+          check-admin-permissions: 'false'
+          build-wheel: 'false'
+          skip-github-release: 'true'
+
+      - name: Verify release
+        run: |
+          echo "::group::Tags after release"
+          git tag -l
+          echo "::endgroup::"
+
+          echo "::group::Recent commits"
+          git log --oneline -n 10
+          echo "::endgroup::"
+
+          # The new tag must exist and must not equal 0.1.0 (the seed tag).
+          LATEST_TAG=$(git describe --tags --abbrev=0)
+          echo "Latest tag: $LATEST_TAG"
+          if [ "$LATEST_TAG" = "0.1.0" ]; then
+            echo "::error::No new tag was created — release action did not bump the version"
+            exit 1
+          fi
+
+          NEW_VERSION=$(grep -m1 'version = ' pyproject.toml | cut -d'"' -f2)
+          echo "Version in pyproject.toml: $NEW_VERSION"
+          if [ "$NEW_VERSION" = "0.1.0" ]; then
+            echo "::error::pyproject.toml version was not bumped"
+            exit 1
+          fi
+
+          if grep -q "$NEW_VERSION" CHANGELOG.md; then
+            echo "[OK] CHANGELOG.md contains $NEW_VERSION"
+          else
+            echo "::error::CHANGELOG.md missing entry for $NEW_VERSION"
+            exit 1
+          fi
+
+  test-release-pixi:
+    name: Test release - pixi (${{ matrix.increment }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        increment: [patch, minor]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Stage test fixture (pixi)
+        run: |
+          cat > pyproject.toml << 'EOF'
+          [project]
+          name = "test-release-integration"
+          version = "0.1.0"
+          description = "Integration test for release action with Pixi"
+          readme = "README.md"
+          requires-python = ">=3.12"
+          dependencies = []
+
+          [tool.commitizen]
+          name = "cz_conventional_commits"
+          version = "0.1.0"
+          tag_format = "$version"
+          version_files = ["pyproject.toml:version"]
+          update_changelog_on_bump = true
+
+          [build-system]
+          requires = ["setuptools>=61.0"]
+          build-backend = "setuptools.build_meta"
+          EOF
+
+          cat > pixi.toml << 'EOF'
+          [project]
+          name = "test-release-integration"
+          channels = ["conda-forge"]
+          platforms = ["linux-64"]
+
+          [dependencies]
+          python = "3.12.*"
+
+          [feature.dev.dependencies]
+          commitizen = ">=3.0.0"
+
+          [environments]
+          default = ["dev"]
+          EOF
+
+          mkdir -p test_release_integration
+          touch test_release_integration/__init__.py
+
+      - name: Setup Pixi (to generate lockfile)
+        uses: prefix-dev/setup-pixi@v0.8.14
+        with:
+          pixi-version: v0.49.0
+
+      - name: Generate pixi.lock
+        run: pixi install
+
+      - name: Clean up repository tags
+        run: git tag -l | xargs -r git tag -d
+
+      - name: Setup fake git remote
+        uses: ./.github/workflows/test-helpers/setup-fake-remote
+
+      - name: Seed test history
+        env:
+          INCREMENT: ${{ matrix.increment }}
+        run: |
+          git config user.name "Test Bot"
+          git config user.email "test@example.com"
+
+          cat > CHANGELOG.md << 'EOF'
+          # Changelog
+
+          All notable changes to this project will be documented in this file.
+          EOF
+
+          git add pyproject.toml pixi.toml pixi.lock CHANGELOG.md test_release_integration
+          git commit -m "chore: initial commit"
+          git tag 0.1.0
+          git push origin "$(git branch --show-current)"
+          git push origin 0.1.0
+
+          case "$INCREMENT" in
+            patch) MSG="fix: small bug for patch test" ;;
+            minor) MSG="feat: new feature for minor test" ;;
+          esac
+          echo "# test" > README.md
+          git add README.md
+          git commit -m "$MSG"
+          git push origin "$(git branch --show-current)"
+
+      - name: Run release action (pixi)
+        uses: ./actions/release/github
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          increment: ${{ matrix.increment }}
+          package-manager: 'pixi'
+          pixi-environments: 'default'
+          pixi-activate-environment: 'default'
+          check-admin-permissions: 'false'
+          build-wheel: 'false'
+          skip-github-release: 'true'
+
+      - name: Verify release
+        run: |
+          LATEST_TAG=$(git describe --tags --abbrev=0)
+          echo "Latest tag: $LATEST_TAG"
+          if [ "$LATEST_TAG" = "0.1.0" ]; then
+            echo "::error::No new tag was created"
+            exit 1
+          fi
+          NEW_VERSION=$(grep -m1 'version = ' pyproject.toml | head -1 | cut -d'"' -f2)
+          if [ "$NEW_VERSION" = "0.1.0" ]; then
+            echo "::error::pyproject.toml version was not bumped"
+            exit 1
+          fi
+          echo "[OK] pixi release produced tag $LATEST_TAG / version $NEW_VERSION"
+
+  test-release-prerelease:
+    name: Test release - ${{ matrix.prerelease-type }} prerelease
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        prerelease-type: [alpha, beta, rc]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Stage test fixture (uv)
+        run: |
+          cat > pyproject.toml << 'EOF'
+          [project]
+          name = "test-release-integration"
+          version = "1.0.0"
+          description = "Prerelease integration test"
+          readme = "README.md"
+          requires-python = ">=3.12"
+          dependencies = []
+
+          [dependency-groups]
+          dev = ["commitizen>=3.0.0"]
+
+          [tool.commitizen]
+          name = "cz_conventional_commits"
+          version = "1.0.0"
+          tag_format = "$version"
+          version_files = ["pyproject.toml:version"]
+          update_changelog_on_bump = true
+
+          [build-system]
+          requires = ["setuptools>=61.0"]
+          build-backend = "setuptools.build_meta"
+          EOF
+
+          mkdir -p test_release_integration
+          touch test_release_integration/__init__.py
+
+      - name: Generate lock file (uv)
+        run: |
+          pip install uv
+          uv lock
+
+      - name: Clean up repository tags
+        run: git tag -l | xargs -r git tag -d
+
+      - name: Setup fake git remote
+        uses: ./.github/workflows/test-helpers/setup-fake-remote
+
+      - name: Seed test history
+        env:
+          PRE: ${{ matrix.prerelease-type }}
+        run: |
+          git config user.name "Test Bot"
+          git config user.email "test@example.com"
+
+          cat > CHANGELOG.md << 'EOF'
+          # Changelog
+
+          All notable changes to this project will be documented in this file.
+          EOF
+
+          git add pyproject.toml uv.lock CHANGELOG.md test_release_integration
+          git commit -m "chore: initial commit"
+          git tag 1.0.0
+          git push origin "$(git branch --show-current)"
+          git push origin 1.0.0
+
+          echo "# test $PRE" > README.md
+          git add README.md
+          git commit -m "feat: feature for $PRE prerelease"
+          git push origin "$(git branch --show-current)"
+
+      - name: Run release action with prerelease
+        uses: ./actions/release/github
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          increment: 'patch'
+          prerelease-type: ${{ matrix.prerelease-type }}
+          package-manager: 'uv'
+          python-version: '3.12'
+          dependency-groups: 'dev'
+          check-admin-permissions: 'false'
+          build-wheel: 'false'
+          skip-github-release: 'true'
+
+      - name: Verify prerelease tag
+        run: |
+          LATEST_TAG=$(git describe --tags --abbrev=0)
+          echo "Latest tag: $LATEST_TAG"
+
+          # Map prerelease type to PEP 440 suffix
+          case "${{ matrix.prerelease-type }}" in
+            alpha) EXPECTED="a" ;;
+            beta)  EXPECTED="b" ;;
+            rc)    EXPECTED="rc" ;;
+          esac
+
+          if [[ "$LATEST_TAG" == *"$EXPECTED"* ]]; then
+            echo "[OK] Tag $LATEST_TAG contains expected prerelease suffix '$EXPECTED'"
+          else
+            echo "::error::Tag $LATEST_TAG missing expected prerelease suffix '$EXPECTED'"
+            exit 1
+          fi
+
+  summary:
+    runs-on: ubuntu-latest
+    needs: [test-release-uv-poetry, test-release-pixi, test-release-prerelease]
+    if: always()
+    steps:
+      - name: Summary
+        run: |
+          echo "# Release Action Integration Test Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- uv/poetry matrix: ${{ needs.test-release-uv-poetry.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- pixi: ${{ needs.test-release-pixi.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- prerelease: ${{ needs.test-release-prerelease.result }}" >> $GITHUB_STEP_SUMMARY
