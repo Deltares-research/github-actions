@@ -1,0 +1,6 @@
+site_name: mkdocs-deploy fixture
+# Use a non-'docs' name so cp -r into the test workspace does not clobber
+# the repo's tracked docs/ directory.
+docs_dir: site_docs
+nav:
+  - Home: index.md

@@ -1,0 +1,439 @@
+name: Test mkdocs-deploy
+
+# Every job below uses .github/workflows/test-helpers/setup-fake-remote to
+# repoint `origin` at a local bare repo (/tmp/fake-remote.git) before the
+# mkdocs-deploy action runs. This means any `mike deploy --push <version>`
+# invoked by the action goes to that bare repo rather than to the real
+# github.com remote — tests leave no traces on the repo's real gh-pages
+# branch, regardless of which deploy-types fire on which event.
+#
+# Helper scripts under .github/workflows/scripts/:
+#   * assert-gh-pages-has-version.sh <version>  — assert mike pushed <version>
+#   * assert-no-gh-pages-push.sh                — assert no deploy step fired
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  setup-uv-defaults:
+    name: setup uv (defaults, dependency-groups='docs')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # mike needs full history
+
+      - name: Stage fixture
+        run: |
+          cp tests/data/mkdocs-deploy/uv/pyproject.toml ./pyproject.toml
+          cp tests/data/mkdocs-deploy/uv/uv.lock ./uv.lock
+          cp tests/data/mkdocs-deploy/_site/mkdocs.yml ./mkdocs.yml
+          cp -r tests/data/mkdocs-deploy/_site/site_docs ./site_docs
+
+      - name: Set up fake git remote
+        uses: ./.github/workflows/test-helpers/setup-fake-remote
+
+      - name: Run action with all defaults
+        uses: ./actions/mkdocs-deploy
+        with:
+          deploy-types: 'release'  # release event never matches; deploy step skipped
+          deploy-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify defaults applied (Python 3.12, uv, mike+mkdocs installed)
+        run: |
+          python -c "import sys; assert sys.version_info[:2] == (3, 12), sys.version"
+          uv --version
+          uv run python -c "import mike, mkdocs"
+
+      - name: Verify nothing was pushed to fake remote (deploy-types='release' on non-release event)
+        run: bash .github/workflows/scripts/assert-no-gh-pages-push.sh
+
+  setup-uv-custom-groups:
+    name: setup uv (custom dependency-groups)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Stage fixture (uv multi-groups, has dev/docs/test)
+        run: |
+          cp tests/data/uv/multi-groups/pyproject.toml ./pyproject.toml
+          cp tests/data/uv/multi-groups/uv.lock ./uv.lock
+
+      - name: Set up fake git remote
+        uses: ./.github/workflows/test-helpers/setup-fake-remote
+
+      - name: Run action
+        uses: ./actions/mkdocs-deploy
+        with:
+          dependency-groups: 'dev test'
+          deploy-types: 'release'
+          deploy-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify only requested groups installed
+        run: |
+          uv run python -c "import pytest, coverage"
+          if uv run python -c "import mkdocs" 2>/dev/null; then
+            echo "::error::mkdocs (docs group) should NOT be installed when not requested"
+            exit 1
+          fi
+
+  setup-uv-with-poetry-extras-input:
+    name: setup uv (dependency-groups + poetry-extras both passed through)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Stage fixture (uv combined - dev group + docs extra)
+        run: |
+          cp tests/data/uv/combined/pyproject.toml ./pyproject.toml
+          cp tests/data/uv/combined/uv.lock ./uv.lock
+
+      - name: Set up fake git remote
+        uses: ./.github/workflows/test-helpers/setup-fake-remote
+
+      - name: Run action
+        uses: ./actions/mkdocs-deploy
+        with:
+          dependency-groups: 'dev'
+          poetry-extras: 'docs'
+          deploy-types: 'release'
+          deploy-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify both group (pytest) and extra (sphinx) installed
+        # uv passes BOTH install-groups and install-extras unconditionally,
+        # so both pytest (dev group) and sphinx (docs extra) should be present.
+        run: |
+          uv run python -c "import pytest, sphinx"
+
+  setup-poetry-with-groups:
+    name: setup poetry (dependency-groups via --with)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Stage fixture
+        run: |
+          cp tests/data/mkdocs-deploy/poetry/pyproject.toml ./pyproject.toml
+          cp tests/data/mkdocs-deploy/poetry/poetry.lock ./poetry.lock
+          cp tests/data/mkdocs-deploy/_site/mkdocs.yml ./mkdocs.yml
+          cp -r tests/data/mkdocs-deploy/_site/site_docs ./site_docs
+
+      - name: Set up fake git remote
+        uses: ./.github/workflows/test-helpers/setup-fake-remote
+
+      - name: Run action
+        uses: ./actions/mkdocs-deploy
+        with:
+          package-manager: 'poetry'
+          dependency-groups: 'docs'
+          deploy-types: 'release'
+          deploy-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify docs group installed (mike + mkdocs)
+        run: poetry run python -c "import mike, mkdocs"
+
+  setup-poetry-extras-overrides-groups:
+    name: setup poetry (poetry-extras overrides dependency-groups)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Stage fixture (poetry-extras - mike+mkdocs are docs extras)
+        run: |
+          cp tests/data/mkdocs-deploy/poetry-extras/pyproject.toml ./pyproject.toml
+          cp tests/data/mkdocs-deploy/poetry-extras/poetry.lock ./poetry.lock
+          cp tests/data/mkdocs-deploy/_site/mkdocs.yml ./mkdocs.yml
+          cp -r tests/data/mkdocs-deploy/_site/site_docs ./site_docs
+
+      - name: Set up fake git remote
+        uses: ./.github/workflows/test-helpers/setup-fake-remote
+
+      - name: Run action with bogus group + valid extras
+        # If the override works, install-groups is sent as '' → poetry runs
+        # `install --extras docs` (no --with). The bogus 'nonexistent' group
+        # is never passed and so cannot fail. If the override is broken,
+        # poetry would error: "Group(s) not found: nonexistent".
+        uses: ./actions/mkdocs-deploy
+        with:
+          package-manager: 'poetry'
+          dependency-groups: 'nonexistent'
+          poetry-extras: 'docs'
+          deploy-types: 'release'
+          deploy-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify extras path took effect
+        run: poetry run python -c "import mike, mkdocs"
+
+  setup-pixi:
+    name: setup pixi (default environment)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Stage fixture
+        run: |
+          cp tests/data/mkdocs-deploy/pixi/pixi.toml ./pixi.toml
+          cp tests/data/mkdocs-deploy/pixi/pixi.lock ./pixi.lock
+          cp tests/data/mkdocs-deploy/_site/mkdocs.yml ./mkdocs.yml
+          cp -r tests/data/mkdocs-deploy/_site/site_docs ./site_docs
+
+      - name: Set up fake git remote
+        uses: ./.github/workflows/test-helpers/setup-fake-remote
+
+      - name: Run action
+        uses: ./actions/mkdocs-deploy
+        with:
+          package-manager: 'pixi'
+          deploy-types: 'release'
+          deploy-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify mike + mkdocs installed in pixi env
+        run: pixi run python -c "import mike, mkdocs"
+
+  python-version-pin:
+    name: python-version pin honored (3.13)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Stage fixture
+        run: |
+          cp tests/data/mkdocs-deploy/uv/pyproject.toml ./pyproject.toml
+          cp tests/data/mkdocs-deploy/uv/uv.lock ./uv.lock
+
+      - name: Set up fake git remote
+        uses: ./.github/workflows/test-helpers/setup-fake-remote
+
+      - name: Run action with python-version=3.13
+        uses: ./actions/mkdocs-deploy
+        with:
+          python-version: '3.13'
+          dependency-groups: 'docs'
+          deploy-types: 'release'
+          deploy-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify Python 3.13
+        run: python -c "import sys; assert sys.version_info[:2] == (3, 13), sys.version"
+
+  git-config-applied:
+    name: action sets git config to github.actor
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Stage fixture
+        run: |
+          cp tests/data/mkdocs-deploy/uv/pyproject.toml ./pyproject.toml
+          cp tests/data/mkdocs-deploy/uv/uv.lock ./uv.lock
+
+      - name: Set up fake git remote
+        uses: ./.github/workflows/test-helpers/setup-fake-remote
+
+      - name: Run action
+        uses: ./actions/mkdocs-deploy
+        with:
+          dependency-groups: 'docs'
+          deploy-types: 'release'
+          deploy-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify git config matches github.actor
+        run: |
+          NAME=$(git config --global user.name)
+          EMAIL=$(git config --global user.email)
+          EXPECTED_EMAIL="${{ github.actor }}@users.noreply.github.com"
+          if [ "$NAME" != "${{ github.actor }}" ]; then
+            echo "::error::Expected user.name=${{ github.actor }}, got $NAME"
+            exit 1
+          fi
+          if [ "$EMAIL" != "$EXPECTED_EMAIL" ]; then
+            echo "::error::Expected user.email=$EXPECTED_EMAIL, got $EMAIL"
+            exit 1
+          fi
+
+  # --- Deploy step tests --------------------------------------------------
+  # The PR deploy gate matches `pull_request` events. These jobs only run on
+  # PR events and verify that mike actually pushed the 'develop' version to
+  # the fake gh-pages branch.
+
+  deploy-pr-uv:
+    name: deploy pr (uv) → fake gh-pages has develop
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Stage fixture
+        run: |
+          cp tests/data/mkdocs-deploy/uv/pyproject.toml ./pyproject.toml
+          cp tests/data/mkdocs-deploy/uv/uv.lock ./uv.lock
+          cp tests/data/mkdocs-deploy/_site/mkdocs.yml ./mkdocs.yml
+          cp -r tests/data/mkdocs-deploy/_site/site_docs ./site_docs
+
+      - name: Set up fake git remote
+        uses: ./.github/workflows/test-helpers/setup-fake-remote
+
+      - name: Run action with deploy-types=pr
+        uses: ./actions/mkdocs-deploy
+        with:
+          package-manager: 'uv'
+          dependency-groups: 'docs'
+          deploy-types: 'pr'
+          deploy-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify fake gh-pages has develop version
+        run: bash .github/workflows/scripts/assert-gh-pages-has-version.sh develop
+
+  deploy-pr-poetry:
+    name: deploy pr (poetry) → fake gh-pages has develop
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Stage fixture
+        run: |
+          cp tests/data/mkdocs-deploy/poetry/pyproject.toml ./pyproject.toml
+          cp tests/data/mkdocs-deploy/poetry/poetry.lock ./poetry.lock
+          cp tests/data/mkdocs-deploy/_site/mkdocs.yml ./mkdocs.yml
+          cp -r tests/data/mkdocs-deploy/_site/site_docs ./site_docs
+
+      - name: Set up fake git remote
+        uses: ./.github/workflows/test-helpers/setup-fake-remote
+
+      - name: Run action with deploy-types=pr
+        uses: ./actions/mkdocs-deploy
+        with:
+          package-manager: 'poetry'
+          dependency-groups: 'docs'
+          deploy-types: 'pr'
+          deploy-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify fake gh-pages has develop version
+        run: bash .github/workflows/scripts/assert-gh-pages-has-version.sh develop
+
+  deploy-pr-pixi:
+    name: deploy pr (pixi) → fake gh-pages has develop
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Stage fixture
+        run: |
+          cp tests/data/mkdocs-deploy/pixi/pixi.toml ./pixi.toml
+          cp tests/data/mkdocs-deploy/pixi/pixi.lock ./pixi.lock
+          cp tests/data/mkdocs-deploy/_site/mkdocs.yml ./mkdocs.yml
+          cp -r tests/data/mkdocs-deploy/_site/site_docs ./site_docs
+
+      - name: Set up fake git remote
+        uses: ./.github/workflows/test-helpers/setup-fake-remote
+
+      - name: Run action with deploy-types=pr
+        uses: ./actions/mkdocs-deploy
+        with:
+          package-manager: 'pixi'
+          deploy-types: 'pr'
+          deploy-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify fake gh-pages has develop version
+        run: bash .github/workflows/scripts/assert-gh-pages-has-version.sh develop
+
+  deploy-step-gating-no-fire:
+    # Manual only. Passes ALL three deploy-types so each gate is evaluated;
+    # the workflow_dispatch event matches NONE of them, so all three deploy
+    # steps must skip. With fake git in place this is also safe if any
+    # incorrectly fired.
+    name: deploy gates skip on workflow_dispatch
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Stage fixture
+        run: |
+          cp tests/data/mkdocs-deploy/uv/pyproject.toml ./pyproject.toml
+          cp tests/data/mkdocs-deploy/uv/uv.lock ./uv.lock
+          cp tests/data/mkdocs-deploy/_site/mkdocs.yml ./mkdocs.yml
+          cp -r tests/data/mkdocs-deploy/_site/site_docs ./site_docs
+
+      - name: Set up fake git remote
+        uses: ./.github/workflows/test-helpers/setup-fake-remote
+
+      - name: Run action with all deploy-types
+        uses: ./actions/mkdocs-deploy
+        with:
+          dependency-groups: 'docs'
+          deploy-types: 'pr,main,release'
+          deploy-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify NO deploy step fired (fake gh-pages still empty)
+        run: bash .github/workflows/scripts/assert-no-gh-pages-push.sh
+
+  action-yaml-structure:
+    name: action.yml structural sanity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install yq
+        run: sudo snap install yq || sudo apt-get install -y yq
+
+      - name: Verify action.yml shape
+        run: |
+          ACTION=actions/mkdocs-deploy/action.yml
+          for key in name description inputs runs; do
+            if [ "$(yq eval ".${key}" "$ACTION")" = "null" ]; then
+              echo "::error::action.yml is missing top-level '$key'"
+              exit 1
+            fi
+          done
+          for input in python-version package-manager dependency-groups poetry-extras deploy-types deploy-token release-tag; do
+            if [ "$(yq eval ".inputs.\"$input\"" "$ACTION")" = "null" ]; then
+              echo "::error::action.yml is missing input '$input'"
+              exit 1
+            fi
+          done
+          for input in deploy-types deploy-token; do
+            REQ=$(yq eval ".inputs.\"$input\".required" "$ACTION")
+            if [ "$REQ" != "true" ]; then
+              echo "::error::input '$input' must be required, got: $REQ"
+              exit 1
+            fi
+          done
+          USING=$(yq eval ".runs.using" "$ACTION")
+          if [ "$USING" != "composite" ]; then
+            echo "::error::action.runs.using must be 'composite', got: $USING"
+            exit 1
+          fi
+          STEPS=$(yq eval ".runs.steps[].name" "$ACTION")
+          for expected in "Log deployment configuration" "Setup Python with uv" "Setup Python with Poetry" "Setup Python with Pixi" "Configure git" "Deploy PR Documentation" "Deploy Main Documentation" "Deploy Release Documentation"; do
+            if ! echo "$STEPS" | grep -Fxq "$expected"; then
+              echo "::error::action.yml is missing step: $expected"
+              exit 1
+            fi
+          done
+          echo "action.yml structure OK"
