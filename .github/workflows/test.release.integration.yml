@@ -84,7 +84,6 @@ jobs:
           package-manager: ${{ matrix.package-manager }}
           python-version: '3.12'
           dependency-groups: 'dev'
-          check-admin-permissions: 'false'
           build-wheel: 'false'
           skip-github-release: 'true'
 
@@ -177,7 +176,6 @@ jobs:
           package-manager: 'pixi'
           pixi-environments: 'default'
           pixi-activate-environment: 'default'
-          check-admin-permissions: 'false'
           build-wheel: 'false'
           skip-github-release: 'true'
 
@@ -251,7 +249,6 @@ jobs:
           package-manager: 'uv'
           python-version: '3.12'
           dependency-groups: 'dev'
-          check-admin-permissions: 'false'
           build-wheel: 'false'
           skip-github-release: 'true'
 

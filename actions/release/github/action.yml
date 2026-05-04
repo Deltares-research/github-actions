@@ -69,10 +69,6 @@ inputs:
   github-token:
     description: 'GitHub token for API calls and releases'
     required: true
-  check-admin-permissions:
-    description: 'Whether to check if user has admin permissions'
-    required: false
-    default: 'true'
   build-wheel:
     description: 'Whether to build and include wheel in release'
     required: false
@@ -89,7 +85,6 @@ runs:
   using: 'composite'
   steps:
     - name: Check User Permissions
-      if: inputs.check-admin-permissions == 'true'
       shell: bash
       run: |
         echo "::group::Checking User Permissions"
