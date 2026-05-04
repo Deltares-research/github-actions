@@ -94,9 +94,8 @@ jobs:
           patch: ${{ github.event.inputs.patch }}
           python-version: '3.12'
           package-manager: 'uv'
-          dependency-groups: 'dev docs'
+          install-groups: 'dev docs'
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          check-admin-permissions: 'true'
           build-wheel: 'true'
 ```
 
@@ -108,7 +107,6 @@ jobs:
   with:
     version: "1.2.3"
     package-manager: 'poetry'
-    poetry-extras: 'dev,docs'
     github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
@@ -120,7 +118,7 @@ jobs:
   with:
     version: "1.2.3"
     package-manager: 'pixi'
-    dependency-groups: 'dev docs'
+    install-groups: 'dev docs'
     github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
@@ -136,10 +134,8 @@ jobs:
 | `version` | Full version to release (e.g. 1.0.0 or 1.0.0-beta.1) | No | `''` |
 | `python-version` | Python version to install | No | `3.12` |
 | `package-manager` | Package manager (uv, poetry, pixi) | No | `uv` |
-| `dependency-groups` | Dependency groups to install | No | `dev docs` |
-| `poetry-extras` | Poetry extras to install (e.g., "dev,docs") | No | `''` |
+| `install-groups` | Dependency groups to install | No | `dev docs` |
 | `github-token` | GitHub token for API calls and releases | Yes | - |
-| `check-admin-permissions` | Whether to check if user has admin permissions | No | `true` |
 | `build-wheel` | Whether to build and include wheel in release | No | `true` |
 
 ## Version Specification

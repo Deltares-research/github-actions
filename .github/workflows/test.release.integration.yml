@@ -83,7 +83,7 @@ jobs:
           increment: ${{ matrix.increment }}
           package-manager: ${{ matrix.package-manager }}
           python-version: '3.12'
-          dependency-groups: 'dev'
+          install-groups: 'dev'
           build-wheel: 'false'
           skip-github-release: 'true'
 
@@ -248,7 +248,7 @@ jobs:
           prerelease-type: ${{ matrix.prerelease-type }}
           package-manager: 'uv'
           python-version: '3.12'
-          dependency-groups: 'dev'
+          install-groups: 'dev'
           build-wheel: 'false'
           skip-github-release: 'true'
 
