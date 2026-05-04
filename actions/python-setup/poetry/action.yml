@@ -1,5 +1,5 @@
 name: 'Setup Python with Poetry'
-description: 'Setup Python environment with Poetry and install dependencies, with download-cache speedup'
+description: 'Setup Python environment with Poetry and install dependencies, with virtualenv caching'
 
 inputs:
   python-version:
@@ -48,11 +48,11 @@ runs:
         poetry config virtualenvs.path ~/.virtualenvs
         echo "::endgroup::"
 
-    - name: Restore Poetry artifact cache
+    - name: Restore Poetry virtualenv
       uses: actions/cache/restore@v4
       id: cache
       with:
-        path: ~/.cache/pypoetry
+        path: ~/.virtualenvs
         key: poetry-${{ runner.os }}-py${{ inputs.python-version }}-poetry${{ inputs.poetry-version }}-${{ hashFiles('**/poetry.lock') }}
 
     - name: Verify lock file is up to date
@@ -70,7 +70,10 @@ runs:
         INSTALL_EXTRAS: ${{ inputs.install-extras }}
       run: |
         echo "::group::Preparing Poetry install command"
-        args=()
+        # --sync makes poetry remove anything not in the lock + selected
+        # groups/extras, so a restored venv from a different input set is
+        # reconciled to match the current request (no contamination).
+        args=("--sync")
 
         if [[ -n "$INSTALL_EXTRAS" ]]; then
           echo "Installing extras: $INSTALL_EXTRAS"
@@ -106,9 +109,9 @@ runs:
         poetry show
         echo "::endgroup::"
 
-    - name: Save Poetry artifact cache
+    - name: Save Poetry virtualenv
       if: inputs.cache-write == 'true' && steps.cache.outputs.cache-hit != 'true'
       uses: actions/cache/save@v4
       with:
-        path: ~/.cache/pypoetry
+        path: ~/.virtualenvs
         key: poetry-${{ runner.os }}-py${{ inputs.python-version }}-poetry${{ inputs.poetry-version }}-${{ hashFiles('**/poetry.lock') }}
