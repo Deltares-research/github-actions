@@ -5,7 +5,13 @@ name: Test mkdocs-deploy
 # mkdocs-deploy action runs. This means any `mike deploy --push <version>`
 # invoked by the action goes to that bare repo rather than to the real
 # github.com remote — tests leave no traces on the repo's real gh-pages
-# branch, regardless of which triggers fire on which event.
+# branch.
+#
+# Conventions for the new single-`trigger` API:
+#   * Setup-only tests pass `trigger: ''` so no deploy step's `if:` matches.
+#   * Deploy tests pass `trigger: 'pr' | 'main' | 'release'` and gate at the
+#     job level via `if: github.event_name == ...` (the action no longer
+#     double-checks the event name itself).
 #
 # Helper scripts under .github/workflows/scripts/:
 #   * assert-gh-pages-has-version.sh <version>  — assert mike pushed <version>
@@ -38,7 +44,7 @@ jobs:
       - name: Run action with all defaults
         uses: ./actions/mkdocs-deploy
         with:
-          triggers: 'release'  # release event never matches; deploy step skipped
+          trigger: ''  # setup-only — empty trigger matches no deploy gate
           deploy-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Verify defaults applied (Python 3.12, uv, mike+mkdocs installed)
@@ -47,7 +53,7 @@ jobs:
           uv --version
           uv run python -c "import mike, mkdocs"
 
-      - name: Verify nothing was pushed to fake remote (triggers='release' on non-release event)
+      - name: Verify nothing was pushed to fake remote (empty trigger)
         run: bash .github/workflows/scripts/assert-no-gh-pages-push.sh
 
   setup-uv-custom-groups:
@@ -70,7 +76,7 @@ jobs:
         uses: ./actions/mkdocs-deploy
         with:
           install-groups: 'dev test'
-          triggers: 'release'
+          trigger: ''
           deploy-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Verify only requested groups installed
@@ -102,7 +108,7 @@ jobs:
         with:
           install-groups: 'dev'
           install-extras: 'docs'
-          triggers: 'release'
+          trigger: ''
           deploy-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Verify both group (pytest) and extra (sphinx) installed
@@ -131,7 +137,7 @@ jobs:
         with:
           package-manager: 'poetry'
           install-groups: 'docs'
-          triggers: 'release'
+          trigger: ''
           deploy-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Verify docs group installed (mike + mkdocs)
@@ -159,7 +165,7 @@ jobs:
           package-manager: 'poetry'
           install-groups: 'dev'
           install-extras: 'docs'
-          triggers: 'release'
+          trigger: ''
           deploy-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Verify both group (pytest) and extra (sphinx) installed
@@ -190,7 +196,7 @@ jobs:
           package-manager: 'poetry'
           install-groups: ''
           install-extras: 'docs'
-          triggers: 'release'
+          trigger: ''
           deploy-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Verify mike + mkdocs installed via extras path
@@ -218,7 +224,7 @@ jobs:
         uses: ./actions/mkdocs-deploy
         with:
           package-manager: 'pixi'
-          triggers: 'release'
+          trigger: ''
           deploy-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Verify mike + mkdocs installed in pixi env
@@ -245,7 +251,7 @@ jobs:
         with:
           python-version: '3.13'
           install-groups: 'docs'
-          triggers: 'release'
+          trigger: ''
           deploy-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Verify Python 3.13
@@ -271,7 +277,7 @@ jobs:
         uses: ./actions/mkdocs-deploy
         with:
           install-groups: 'docs'
-          triggers: 'release'
+          trigger: ''
           deploy-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Verify git config matches github.actor
@@ -312,12 +318,12 @@ jobs:
       - name: Set up fake git remote
         uses: ./.github/workflows/test-helpers/setup-fake-remote
 
-      - name: Run action with triggers=pr
+      - name: Run action with trigger=pr
         uses: ./actions/mkdocs-deploy
         with:
           package-manager: 'uv'
           install-groups: 'docs'
-          triggers: 'pr'
+          trigger: 'pr'
           deploy-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Verify fake gh-pages has develop version
@@ -342,12 +348,12 @@ jobs:
       - name: Set up fake git remote
         uses: ./.github/workflows/test-helpers/setup-fake-remote
 
-      - name: Run action with triggers=pr
+      - name: Run action with trigger=pr
         uses: ./actions/mkdocs-deploy
         with:
           package-manager: 'poetry'
           install-groups: 'docs'
-          triggers: 'pr'
+          trigger: 'pr'
           deploy-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Verify fake gh-pages has develop version
@@ -372,22 +378,23 @@ jobs:
       - name: Set up fake git remote
         uses: ./.github/workflows/test-helpers/setup-fake-remote
 
-      - name: Run action with triggers=pr
+      - name: Run action with trigger=pr
         uses: ./actions/mkdocs-deploy
         with:
           package-manager: 'pixi'
-          triggers: 'pr'
+          trigger: 'pr'
           deploy-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Verify fake gh-pages has develop version
         run: bash .github/workflows/scripts/assert-gh-pages-has-version.sh develop
 
-  deploy-step-gating-no-fire:
-    # Manual only. Passes ALL three triggers so each gate is evaluated;
-    # the workflow_dispatch event matches NONE of them, so all three deploy
-    # steps must skip. With fake git in place this is also safe if any
-    # incorrectly fired.
-    name: deploy gates skip on workflow_dispatch
+  unknown-trigger-no-deploy:
+    # After the single-`trigger` refactor (commit 4f0abc8) the action no
+    # longer checks `github.event_name` itself — the caller is responsible
+    # for job-level gating. This test confirms the only safety remaining
+    # inside the action: if `trigger` doesn't match any of {pr, main, release},
+    # no deploy step fires.
+    name: unknown trigger value fires no deploy
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
@@ -405,11 +412,13 @@ jobs:
       - name: Set up fake git remote
         uses: ./.github/workflows/test-helpers/setup-fake-remote
 
-      - name: Run action with all triggers
+      - name: Run action with non-matching trigger
         uses: ./actions/mkdocs-deploy
         with:
           install-groups: 'docs'
-          triggers: 'pr,main,release'
+          # The action's deploy gates are exact-match on `trigger`. Any value
+          # not in {pr, main, release} → no deploy step fires.
+          trigger: 'noop'
           deploy-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Verify NO deploy step fired (fake gh-pages still empty)
@@ -433,13 +442,13 @@ jobs:
               exit 1
             fi
           done
-          for input in python-version package-manager install-groups install-extras triggers deploy-token release-tag release-alias main-set-default release-prerelease; do
+          for input in python-version package-manager install-groups install-extras trigger deploy-token release-tag release-alias main-set-default release-prerelease; do
             if [ "$(yq eval ".inputs.\"$input\"" "$ACTION")" = "null" ]; then
               echo "::error::action.yml is missing input '$input'"
               exit 1
             fi
           done
-          for input in triggers deploy-token; do
+          for input in trigger deploy-token; do
             REQ=$(yq eval ".inputs.\"$input\".required" "$ACTION")
             if [ "$REQ" != "true" ]; then
               echo "::error::input '$input' must be required, got: $REQ"
