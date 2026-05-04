@@ -1,4 +1,4 @@
-name: Unit Test - Release Action
+name: release/github - unit
 
 on:
   push:

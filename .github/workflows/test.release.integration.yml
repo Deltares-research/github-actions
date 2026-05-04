@@ -1,4 +1,4 @@
-name: Integration Test - Release Action
+name: release/github - integration
 
 on:
   push:
