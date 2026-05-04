@@ -329,3 +329,68 @@ jobs:
             exit 1
           fi
           echo "Cache was correctly skipped"
+
+  sync-reconciles-on-input-change:
+    name: uv sync --frozen removes stale deps when inputs change
+    # Invokes the action twice in one job with different extras and verifies
+    # the second venv matches the second request only. Proves `uv sync --frozen`
+    # reconciles correctly even when the previous run installed different extras.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage fixture with per-run-unique lock
+        run: |
+          cp tests/data/uv/extras/pyproject.toml ./pyproject.toml
+          cp tests/data/uv/extras/uv.lock ./uv.lock
+          sed -i "1i # test-run-${{ github.run_id }}-reconcile" uv.lock
+
+      - name: First run — extras=dev (installs pytest only)
+        uses: ./actions/python-setup/uv
+        with:
+          install-extras: 'dev'
+          verify-lock: 'true'
+
+      - name: Verify only pytest after first run
+        run: |
+          uv run python -c "import pytest"
+          if uv run python -c "import sphinx" 2>/dev/null; then
+            echo "::error::sphinx should NOT be installed after first sync (extras=dev only)"
+            exit 1
+          fi
+
+      - name: Second run — extras=docs (should reconcile: remove pytest, add sphinx)
+        uses: ./actions/python-setup/uv
+        with:
+          install-extras: 'docs'
+          verify-lock: 'true'
+
+      - name: Verify sync reconciled (sphinx in, pytest out)
+        run: |
+          uv run python -c "import sphinx"
+          if uv run python -c "import pytest" 2>/dev/null; then
+            echo "::error::pytest should have been removed by uv sync --frozen after second run (extras=docs only)"
+            exit 1
+          fi
+
+  messy-input-parsing:
+    name: tolerate whitespace and mixed separators in install-groups
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage fixture
+        run: |
+          cp tests/data/uv/multi-groups/pyproject.toml ./pyproject.toml
+          cp tests/data/uv/multi-groups/uv.lock ./uv.lock
+
+      - name: Run action with messy input
+        uses: ./actions/python-setup/uv
+        with:
+          # Leading/trailing whitespace, comma+space mix, repeated separators
+          install-groups: '  dev , docs ,test  '
+          verify-lock: 'true'
+
+      - name: Verify all three groups installed correctly
+        run: |
+          uv run python -c "import pytest, black, sphinx, mkdocs, coverage"

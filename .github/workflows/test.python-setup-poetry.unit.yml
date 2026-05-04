@@ -333,3 +333,69 @@ jobs:
             exit 1
           fi
           echo "Cache was correctly skipped"
+
+  sync-reconciles-on-input-change:
+    name: poetry sync removes stale deps when inputs change
+    # Invokes the action twice in one job with different extras and verifies
+    # the second venv matches the second request only. Proves `poetry sync`
+    # correctly reconciles a cache-restored venv to the new input set
+    # (contamination-impossible by design, not just by test ordering).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage fixture with per-run-unique lock
+        run: |
+          cp tests/data/poetry/extras/pyproject.toml ./pyproject.toml
+          cp tests/data/poetry/extras/poetry.lock ./poetry.lock
+          sed -i "1i # test-run-${{ github.run_id }}-reconcile" poetry.lock
+
+      - name: First run — extras=dev (installs pytest only)
+        uses: ./actions/python-setup/poetry
+        with:
+          install-extras: 'dev'
+          verify-lock: 'true'
+
+      - name: Verify only pytest after first run
+        run: |
+          poetry run python -c "import pytest"
+          if poetry run python -c "import sphinx" 2>/dev/null; then
+            echo "::error::sphinx should NOT be installed after first sync (extras=dev only)"
+            exit 1
+          fi
+
+      - name: Second run — extras=docs (should reconcile: remove pytest, add sphinx)
+        uses: ./actions/python-setup/poetry
+        with:
+          install-extras: 'docs'
+          verify-lock: 'true'
+
+      - name: Verify sync reconciled (sphinx in, pytest out)
+        run: |
+          poetry run python -c "import sphinx"
+          if poetry run python -c "import pytest" 2>/dev/null; then
+            echo "::error::pytest should have been removed by poetry sync after second run (extras=docs only)"
+            exit 1
+          fi
+
+  messy-input-parsing:
+    name: tolerate whitespace and mixed separators in install-groups
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage fixture
+        run: |
+          cp tests/data/poetry/multi-groups/pyproject.toml ./pyproject.toml
+          cp tests/data/poetry/multi-groups/poetry.lock ./poetry.lock
+
+      - name: Run action with messy input
+        uses: ./actions/python-setup/poetry
+        with:
+          # Leading/trailing whitespace, comma+space mix, repeated separators
+          install-groups: '  dev , docs ,test  '
+          verify-lock: 'true'
+
+      - name: Verify all three groups installed correctly
+        run: |
+          poetry run python -c "import pytest, black, sphinx, mkdocs, coverage"
