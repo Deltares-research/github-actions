@@ -1,31 +1,43 @@
-name: 'Complete MkDocs Deploy'
-description: 'Stand-alone MkDocs workflow - sets up Python via actions/python-setup, then deploys docs to GitHub Pages with mike'
+name: 'MkDocs Deploy'
+description: |
+  Stand-alone composite action that sets up a Python environment and deploys
+  versioned MkDocs documentation to GitHub Pages using mike.
+
+  Python setup is delegated to `actions/python-setup/<package-manager>` —
+  install-groups and install-extras are forwarded unchanged.
+
+  After setup, three deploy paths are conditionally enabled via `triggers`,
+  each ALSO gated on the matching GitHub event so a single trigger value can
+  safely be reused across all three deploy events:
+    * pr      → on `pull_request`             → mike deploy --push develop
+    * main    → on `push` to `refs/heads/main` → mike deploy --push main         + set-default main
+    * release → on `release`                  → mike deploy --push <release-tag> latest + set-default latest
 
 inputs:
   python-version:
-    description: 'Python version to install'
+    description: 'Python version to install. Example: "3.12", "3.13", "3.12.5".'
     required: false
     default: '3.12'
   package-manager:
-    description: 'Package manager to use (uv, poetry, pixi)'
+    description: 'Package manager to set up Python with. Example: "uv", "poetry", "pixi".'
     required: false
     default: 'uv'
-  dependency-groups:
-    description: 'Dependency groups to install (uv --group / poetry --with). Space- or comma-separated.'
+  install-groups:
+    description: 'PEP 735 dependency groups to install (uv --group / poetry --with). Space- or comma-separated. Example: "docs", "dev docs", "dev,docs".'
     required: false
     default: 'docs'
-  poetry-extras:
-    description: 'Poetry extras to install (--extras). When set, dependency-groups is ignored for poetry to preserve previous behavior.'
+  install-extras:
+    description: 'PEP 621 optional-dependency extras to install (uv --extra / poetry --extras). Space- or comma-separated. Coexists with install-groups. Example: "docs", "dev docs", "dev,docs".'
     required: false
     default: ''
-  deploy-types:
-    description: 'Comma-separated list of deploy types to run (pr, main, release)'
+  triggers:
+    description: 'Which deploy paths to enable. Comma-separated subset of {pr, main, release}. Each is also gated on the matching GitHub event. Example: "pr", "main,release", "pr,main,release".'
     required: true
   deploy-token:
-    description: 'GitHub token for deployment'
+    description: 'GitHub token used by mike to push to gh-pages. Needs `contents: write`. Example: "${{ secrets.GITHUB_TOKEN }}".'
     required: true
   release-tag:
-    description: 'Release tag for version deployment'
+    description: 'Release tag deployed by mike when the release path fires. Typically the release event payload tag. Example: "v1.0.0", "${{ github.event.release.tag_name }}".'
     required: false
     default: ''
 
@@ -38,9 +50,9 @@ runs:
         echo "::group::MkDocs Deployment Configuration"
         echo "Python version: ${{ inputs.python-version }}"
         echo "Package manager: ${{ inputs.package-manager }}"
-        echo "Dependency groups: ${{ inputs.dependency-groups }}"
-        echo "Poetry extras: ${{ inputs.poetry-extras }}"
-        echo "Deploy types: ${{ inputs.deploy-types }}"
+        echo "Install groups: ${{ inputs.install-groups }}"
+        echo "Install extras: ${{ inputs.install-extras }}"
+        echo "Triggers: ${{ inputs.triggers }}"
         echo "Event name: ${{ github.event_name }}"
         echo "Ref: ${{ github.ref }}"
         echo "::endgroup::"
@@ -51,16 +63,16 @@ runs:
       uses: Deltares-research/github-actions/actions/python-setup/uv@main
       with:
         python-version: ${{ inputs.python-version }}
-        install-groups: ${{ inputs.dependency-groups }}
-        install-extras: ${{ inputs.poetry-extras }}
+        install-groups: ${{ inputs.install-groups }}
+        install-extras: ${{ inputs.install-extras }}
 
     - name: Setup Python with Poetry
       if: inputs.package-manager == 'poetry'
       uses: Deltares-research/github-actions/actions/python-setup/poetry@main
       with:
         python-version: ${{ inputs.python-version }}
-        install-groups: ${{ inputs.poetry-extras == '' && inputs.dependency-groups || '' }}
-        install-extras: ${{ inputs.poetry-extras }}
+        install-groups: ${{ inputs.install-groups }}
+        install-extras: ${{ inputs.install-extras }}
 
     - name: Setup Python with Pixi
       if: inputs.package-manager == 'pixi'
@@ -79,7 +91,7 @@ runs:
         echo "::endgroup::"
 
     - name: Deploy PR Documentation
-      if: contains(inputs.deploy-types, 'pr') && github.event_name == 'pull_request'
+      if: contains(inputs.triggers, 'pr') && github.event_name == 'pull_request'
       shell: bash
       env:
         ACTIONS_DEPLOY_TOKEN: ${{ inputs.deploy-token }}
@@ -103,7 +115,7 @@ runs:
         echo "::endgroup::"
 
     - name: Deploy Main Documentation
-      if: contains(inputs.deploy-types, 'main') && github.event_name == 'push' && github.ref == 'refs/heads/main'
+      if: contains(inputs.triggers, 'main') && github.event_name == 'push' && github.ref == 'refs/heads/main'
       shell: bash
       env:
         ACTIONS_DEPLOY_TOKEN: ${{ inputs.deploy-token }}
@@ -139,7 +151,7 @@ runs:
         echo "::endgroup::"
 
     - name: Deploy Release Documentation
-      if: contains(inputs.deploy-types, 'release') && github.event_name == 'release'
+      if: contains(inputs.triggers, 'release') && github.event_name == 'release'
       shell: bash
       env:
         ACTIONS_DEPLOY_TOKEN: ${{ inputs.deploy-token }}
