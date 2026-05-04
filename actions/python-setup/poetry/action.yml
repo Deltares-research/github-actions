@@ -7,15 +7,15 @@ inputs:
     required: false
     default: '3.12'
   poetry-version:
-    description: 'Poetry version to install. Example: "2.3.3", "2.3.0", "1.8.4".'
+    description: 'Poetry version to install. Requires Poetry >= 2.0 (uses the `poetry sync` command). Example: "2.3.3", "2.3.0", "2.0.1".'
     required: false
     default: '2.3.3'
   install-groups:
-    description: 'Poetry groups to install via poetry install --with. Space- or comma-separated. Example: "dev", "dev docs", "dev,docs".'
+    description: 'Poetry groups to install via poetry sync --with. Space- or comma-separated. Example: "dev", "dev docs", "dev,docs".'
     required: false
     default: ''
   install-extras:
-    description: 'Poetry extras to install via poetry install --extras. Space- or comma-separated. Example: "docs", "dev docs", "dev,docs".'
+    description: 'Poetry extras to install via poetry sync --extras. Space- or comma-separated. Example: "docs", "dev docs", "dev,docs".'
     required: false
     default: ''
   verify-lock:
@@ -63,17 +63,18 @@ runs:
         poetry check --lock
         echo "::endgroup::"
 
-    - name: Install Dependencies
+    - name: Sync Dependencies
       shell: bash
       env:
         INSTALL_GROUPS: ${{ inputs.install-groups }}
         INSTALL_EXTRAS: ${{ inputs.install-extras }}
       run: |
-        echo "::group::Preparing Poetry install command"
-        # --sync makes poetry remove anything not in the lock + selected
-        # groups/extras, so a restored venv from a different input set is
-        # reconciled to match the current request (no contamination).
-        args=("--sync")
+        echo "::group::Preparing Poetry sync command"
+        # `poetry sync` reconciles the venv to exactly match the lock + selected
+        # groups/extras, removing anything else. This means a cache-restored
+        # venv from a previous run with different inputs is corrected to match
+        # the current request — no cross-input contamination.
+        args=()
 
         if [[ -n "$INSTALL_EXTRAS" ]]; then
           echo "Installing extras: $INSTALL_EXTRAS"
@@ -95,11 +96,11 @@ runs:
           done
         fi
 
-        echo "Running: poetry install ${args[*]}"
+        echo "Running: poetry sync ${args[*]}"
         echo "::endgroup::"
 
-        echo "::group::Installing dependencies with Poetry"
-        poetry install "${args[@]}"
+        echo "::group::Syncing dependencies with Poetry"
+        poetry sync "${args[@]}"
         echo "::endgroup::"
 
     - name: List environment contents
