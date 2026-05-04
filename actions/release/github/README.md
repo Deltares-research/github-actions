@@ -38,7 +38,7 @@ jobs:
           fetch-depth: 0
           
       - name: Create Release
-        uses: Deltares-research/github-actions/actions/python-release@v1
+        uses: Deltares-research/github-actions/actions/release/github@v1
         with:
           version: ${{ github.event.inputs.version }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -85,7 +85,7 @@ jobs:
           ref: ${{ github.event.inputs.release_branch || 'main' }}
           
       - name: Create Release
-        uses: Deltares-research/github-actions/actions/python-release@v1
+        uses: Deltares-research/github-actions/actions/release/github@v1
         with:
           release-branch: ${{ github.event.inputs.release_branch || 'main' }}
           version: ${{ github.event.inputs.version }}
@@ -104,7 +104,7 @@ jobs:
 
 ```yaml
 - name: Create Release with Poetry
-  uses: Deltares-research/github-actions/actions/python-release@v1
+  uses: Deltares-research/github-actions/actions/release/github@v1
   with:
     version: "1.2.3"
     package-manager: 'poetry'
@@ -116,7 +116,7 @@ jobs:
 
 ```yaml
 - name: Create Release with Pixi
-  uses: Deltares-research/github-actions/actions/python-release@v1
+  uses: Deltares-research/github-actions/actions/release/github@v1
   with:
     version: "1.2.3"
     package-manager: 'pixi'
