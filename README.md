@@ -12,10 +12,9 @@ Actions for setting up Python environments for general development.
 [📖 Full Documentation](actions/python-setup/README.md)
 
 ### 📚 MkDocs Deployment (`actions/mkdocs-deploy/`)
-Complete workflow actions for MkDocs documentation - from setup to deployment.
+Stand-alone composite action for deploying MkDocs documentation with `mike` versioning. Supports uv, poetry, pixi.
 
-- **`actions/mkdocs-deploy/setup`** - Universal Python setup supporting uv, poetry, pixi
-- **`actions/mkdocs-deploy/deploy`** - Deploy with mike versioning support
+- **`actions/mkdocs-deploy/complete`** - Setup Python (via `actions/python-setup/<pm>`) and deploy docs in one step
 
 [📖 Full Documentation](actions/mkdocs-deploy/README.md)
 
@@ -31,39 +30,7 @@ Complete automated release workflow for Python packages with version bumping, ch
 
 - **`actions/python-release`** - Permission checks, version bumping, changelog generation, wheel building, GitHub releases
 
-[📖 Full Documentation](actions/python-release/README.md)
-
-## Reusable Workflows
-
-### MkDocs Deployment Workflow
-
-Complete workflow for deploying MkDocs documentation with support for multiple package managers.
-
-**Note**: Reusable workflows must be in `.github/workflows/` due to GitHub requirements.
-
-```yaml
-# .github/workflows/docs.yml
-name: Deploy Documentation
-
-on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: ['**']
-  release:
-    types: [published]
-
-jobs:
-  deploy-docs:
-    uses: Deltares-research/github-actions/.github/workflows/deploy-mkdocs.yml@v1
-    with:
-      python-version: '3.12'
-      package-manager: 'uv'       # or 'poetry', 'pixi'
-      dependency-groups: 'docs'
-      # poetry-extras: 'docs,dev'  # Only for Poetry
-    secrets:
-      ACTIONS_DEPLOY_TOKEN: ${{ secrets.ACTIONS_DEPLOY_TOKEN }}
-```
+[📖 Full Documentation](actions/release/README.md)
 
 ## Usage
 

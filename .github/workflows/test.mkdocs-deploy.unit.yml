@@ -165,6 +165,37 @@ jobs:
       - name: Verify both group (pytest) and extra (sphinx) installed
         run: poetry run python -c "import pytest, sphinx"
 
+  setup-poetry-with-extras-only:
+    name: setup poetry (mike installed via extras only, no group)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Stage fixture (poetry-extras - mike+mkdocs are docs extras, no group)
+        run: |
+          cp tests/data/mkdocs-deploy/poetry-extras/pyproject.toml ./pyproject.toml
+          cp tests/data/mkdocs-deploy/poetry-extras/poetry.lock ./poetry.lock
+
+      - name: Set up fake git remote
+        uses: ./.github/workflows/test-helpers/setup-fake-remote
+
+      - name: Run action with install-extras only (no install-groups)
+        # The fixture has no 'docs' group — only a 'docs' extra. We must opt
+        # out of the action's default install-groups='docs' by setting it to
+        # ''; otherwise poetry would error with "Group(s) not found: docs".
+        uses: ./actions/mkdocs-deploy
+        with:
+          package-manager: 'poetry'
+          install-groups: ''
+          install-extras: 'docs'
+          triggers: 'release'
+          deploy-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify mike + mkdocs installed via extras path
+        run: poetry run python -c "import mike, mkdocs"
+
   setup-pixi:
     name: setup pixi (default environment)
     runs-on: ubuntu-latest

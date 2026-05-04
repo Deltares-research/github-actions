@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "test-mkdocs-deploy-poetry-extras"
 version = "0.1.0"
-description = "Fixture for mkdocs-deploy: poetry with mike + mkdocs as the docs extra"
+description = "Fixture for mkdocs-deploy: poetry with mike + mkdocs as the docs extra (no group)"
 authors = ["Test <test@example.com>"]
 package-mode = false
 
