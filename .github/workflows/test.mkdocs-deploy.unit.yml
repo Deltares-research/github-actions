@@ -433,7 +433,7 @@ jobs:
               exit 1
             fi
           done
-          for input in python-version package-manager install-groups install-extras triggers deploy-token release-tag; do
+          for input in python-version package-manager install-groups install-extras triggers deploy-token release-tag release-alias; do
             if [ "$(yq eval ".inputs.\"$input\"" "$ACTION")" = "null" ]; then
               echo "::error::action.yml is missing input '$input'"
               exit 1

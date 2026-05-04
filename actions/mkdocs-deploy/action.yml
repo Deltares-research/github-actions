@@ -40,6 +40,10 @@ inputs:
     description: 'Release tag deployed by mike when the release path fires. Typically the release event payload tag. Example: "v1.0.0", "${{ github.event.release.tag_name }}".'
     required: false
     default: ''
+  release-alias:
+    description: 'Mike alias the release version is published under (and which is then set as the default served version). Example: "latest", "stable".'
+    required: false
+    default: 'latest'
 
 runs:
   using: 'composite'
@@ -156,34 +160,36 @@ runs:
       env:
         ACTIONS_DEPLOY_TOKEN: ${{ inputs.deploy-token }}
         RELEASE_TAG_VERSION: ${{ inputs.release-tag }}
+        RELEASE_ALIAS: ${{ inputs.release-alias }}
       run: |
         echo "::group::Deploying release documentation"
         echo "Release tag: ${RELEASE_TAG_VERSION}"
+        echo "Release alias: ${RELEASE_ALIAS}"
         echo "Package manager: ${{ inputs.package-manager }}"
         case "${{ inputs.package-manager }}" in
           "uv")
-            echo "Deploying release ${RELEASE_TAG_VERSION} and updating 'latest' alias..."
-            uv run mike deploy --push --update-aliases ${RELEASE_TAG_VERSION} latest
-            echo "Setting 'latest' as default..."
-            uv run mike set-default --push latest
+            echo "Deploying release ${RELEASE_TAG_VERSION} and updating '${RELEASE_ALIAS}' alias..."
+            uv run mike deploy --push --update-aliases ${RELEASE_TAG_VERSION} ${RELEASE_ALIAS}
+            echo "Setting '${RELEASE_ALIAS}' as default..."
+            uv run mike set-default --push ${RELEASE_ALIAS}
             ;;
           "poetry")
-            echo "Deploying release ${RELEASE_TAG_VERSION} and updating 'latest' alias..."
-            poetry run mike deploy --push --update-aliases ${RELEASE_TAG_VERSION} latest
-            echo "Setting 'latest' as default..."
-            poetry run mike set-default --push latest
+            echo "Deploying release ${RELEASE_TAG_VERSION} and updating '${RELEASE_ALIAS}' alias..."
+            poetry run mike deploy --push --update-aliases ${RELEASE_TAG_VERSION} ${RELEASE_ALIAS}
+            echo "Setting '${RELEASE_ALIAS}' as default..."
+            poetry run mike set-default --push ${RELEASE_ALIAS}
             ;;
           "pixi")
-            echo "Deploying release ${RELEASE_TAG_VERSION} and updating 'latest' alias..."
-            pixi run mike deploy --push --update-aliases ${RELEASE_TAG_VERSION} latest
-            echo "Setting 'latest' as default..."
-            pixi run mike set-default --push latest
+            echo "Deploying release ${RELEASE_TAG_VERSION} and updating '${RELEASE_ALIAS}' alias..."
+            pixi run mike deploy --push --update-aliases ${RELEASE_TAG_VERSION} ${RELEASE_ALIAS}
+            echo "Setting '${RELEASE_ALIAS}' as default..."
+            pixi run mike set-default --push ${RELEASE_ALIAS}
             ;;
           *)
-            echo "Deploying release ${RELEASE_TAG_VERSION} and updating 'latest' alias..."
-            mike deploy --push --update-aliases ${RELEASE_TAG_VERSION} latest
-            echo "Setting 'latest' as default..."
-            mike set-default --push latest
+            echo "Deploying release ${RELEASE_TAG_VERSION} and updating '${RELEASE_ALIAS}' alias..."
+            mike deploy --push --update-aliases ${RELEASE_TAG_VERSION} ${RELEASE_ALIAS}
+            echo "Setting '${RELEASE_ALIAS}' as default..."
+            mike set-default --push ${RELEASE_ALIAS}
             ;;
         esac
         echo "::endgroup::"

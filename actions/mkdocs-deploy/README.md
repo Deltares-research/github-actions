@@ -12,7 +12,7 @@ After Python setup, three deploy paths are conditionally enabled via the `trigge
 |---------------|----------------------|---------------------------------------------------------------------|
 | `pr`          | `pull_request`       | `mike deploy --push develop`                                        |
 | `main`        | `push` to `refs/heads/main` | `mike deploy --push main` then `mike set-default --push main` |
-| `release`     | `release`            | `mike deploy --push --update-aliases <release-tag> latest` then `mike set-default --push latest` |
+| `release`     | `release`            | `mike deploy --push --update-aliases <release-tag> <release-alias>` then `mike set-default --push <release-alias>` |
 
 ## Inputs
 
@@ -25,6 +25,7 @@ After Python setup, three deploy paths are conditionally enabled via the `trigge
 | `triggers`        | **yes**  | —        | Comma-separated subset of `pr,main,release`. |
 | `deploy-token`    | **yes**  | —        | Token used by `mike` to push to `gh-pages` (needs `contents: write`). |
 | `release-tag`     | no       | `''`     | Tag deployed by `mike` when the release path fires; usually `${{ github.event.release.tag_name }}`. |
+| `release-alias`   | no       | `latest` | Mike alias the release version is published under and set as default. Common alternatives: `stable`. |
 
 ## Required workflow setup
 
@@ -135,6 +136,17 @@ jobs:
           triggers: 'release'
           deploy-token: ${{ secrets.GITHUB_TOKEN }}
           release-tag: ${{ github.event.release.tag_name }}
+```
+
+### 6. Custom release alias (e.g. `stable` instead of `latest`)
+
+```yaml
+- uses: Deltares-research/github-actions/actions/mkdocs-deploy@v1
+  with:
+    triggers: 'release'
+    deploy-token: ${{ secrets.GITHUB_TOKEN }}
+    release-tag: ${{ github.event.release.tag_name }}
+    release-alias: 'stable'
 ```
 
 ## Notes
