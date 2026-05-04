@@ -11,9 +11,29 @@ inputs:
     required: false
     default: 'uv'
   dependency-groups:
-    description: 'Dependency groups to install'
+    description: 'Dependency groups to install. Forwarded to install-groups for uv/poetry. Ignored for pixi (pixi installs from manifest). Space- or comma-separated.'
     required: false
     default: 'dev docs'
+  install-extras:
+    description: 'Optional-dependency extras to install via uv sync --extra (uv only). Space- or comma-separated.'
+    required: false
+    default: ''
+  poetry-extras:
+    description: 'Poetry extras to install via poetry install --extras (poetry only). Space- or comma-separated.'
+    required: false
+    default: ''
+  pixi-environments:
+    description: 'Pixi environments to install (pixi only; passed through to setup-pixi). Empty means the default environment.'
+    required: false
+    default: ''
+  pixi-activate-environment:
+    description: 'Pixi environment to activate on PATH after install (pixi only). Must also be listed in pixi-environments.'
+    required: false
+    default: ''
+  verify-lock:
+    description: 'Whether to verify the lock file is up to date before installing dependencies.'
+    required: false
+    default: 'true'
   tex-files:
     description: 'Comma-separated list of .tex files to compile (without extension)'
     required: true
@@ -75,7 +95,8 @@ runs:
       with:
         python-version: ${{ inputs.python-version }}
         install-groups: ${{ inputs.dependency-groups }}
-        verify-lock: 'false'
+        install-extras: ${{ inputs.install-extras }}
+        verify-lock: ${{ inputs.verify-lock }}
 
     - name: Setup Python with Poetry
       if: inputs.package-manager == 'poetry'
@@ -83,13 +104,16 @@ runs:
       with:
         python-version: ${{ inputs.python-version }}
         install-groups: ${{ inputs.dependency-groups }}
-        verify-lock: 'false'
+        install-extras: ${{ inputs.poetry-extras }}
+        verify-lock: ${{ inputs.verify-lock }}
 
     - name: Setup Python with Pixi
       if: inputs.package-manager == 'pixi'
       uses: Deltares-research/github-actions/actions/python-setup/pixi@main
       with:
-        verify-lock: 'false'
+        environments: ${{ inputs.pixi-environments }}
+        activate-environment: ${{ inputs.pixi-activate-environment }}
+        verify-lock: ${{ inputs.verify-lock }}
 
     - name: Checkout Deltares LaTeX Styles
       shell: bash

@@ -14,23 +14,23 @@ Actions for setting up Python environments for general development.
 ### 📚 MkDocs Deployment (`actions/mkdocs-deploy/`)
 Stand-alone composite action for deploying MkDocs documentation with `mike` versioning. Supports uv, poetry, pixi.
 
-- **`actions/mkdocs-deploy/complete`** - Setup Python (via `actions/python-setup/<pm>`) and deploy docs in one step
+- **`actions/mkdocs-deploy`** - Setup Python (via `actions/python-setup/<pm>`) and deploy docs in one step
 
 [📖 Full Documentation](actions/mkdocs-deploy/README.md)
 
-### 📄 LaTeX Documentation (`actions/latex-docs/`)
+### 📄 LaTeX Documentation (`actions/release/latex-manual/`)
 Complete workflow for generating LaTeX/PDF documentation from Markdown using Deltares styles.
 
-- **`actions/latex-docs`** - Setup environment, fetch Deltares styles, convert Markdown to LaTeX, compile PDFs
+- **`actions/release/latex-manual`** - Setup environment, fetch Deltares styles, convert Markdown to LaTeX, compile PDFs
 
-[📖 Full Documentation](actions/latex-docs/README.md)
+[📖 Full Documentation](actions/release/latex-manual/README.md)
 
-### 🚀 Python Release (`actions/python-release/`)
+### 🚀 GitHub Release (`actions/release/github/`)
 Complete automated release workflow for Python packages with version bumping, changelog generation, and GitHub release creation.
 
-- **`actions/python-release`** - Permission checks, version bumping, changelog generation, wheel building, GitHub releases
+- **`actions/release/github`** - Permission checks, version bumping, changelog generation, wheel building, GitHub releases
 
-[📖 Full Documentation](actions/release/README.md)
+[📖 Full Documentation](actions/release/github/README.md)
 
 ## Usage
 
