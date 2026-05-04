@@ -1,0 +1,263 @@
+name: release/latex-manual - unit
+
+# Tests for actions/release/latex-manual.
+#
+# Strategy
+# --------
+# The action is self-contained — it installs its own Python, ddocs, pandoc,
+# subversion, and (when compiling PDFs) TeX Live. It does not interact with
+# the consumer's pyproject or virtualenv, so tests don't need the per-PM
+# fixture matrix used elsewhere in this repo.
+#
+# Two external dependencies are handled as follows:
+#   * SVN: every job passes bogus credentials. The action's "Checkout
+#     Deltares LaTeX Styles" step has a graceful failure path that emits a
+#     `::warning::` and exits 0, which lets the rest of the action run. So
+#     all jobs implicitly verify that path stays wired up.
+#   * texlive + pdflatex: the action gates these on `tex-files != ''`. The
+#     unit job leaves `tex-files` empty (the default), skipping both the
+#     ~5-minute apt install and pdflatex. The `pdf-compile-end-to-end` job
+#     exercises the heavy path on `workflow_dispatch` only.
+#
+# The `ddocs` CLI (https://github.com/Deltares-research/doc_utils) is
+# installed from git by the action — tests just let that happen and assert
+# the markdown-to-latex step produced output.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+env:
+  MD_INPUT: tests/data/release-latex-manual/markdown
+  # Bogus SVN creds — the action gracefully continues on auth failure.
+  SVN_USERNAME: nobody
+  SVN_PASSWORD: nopass
+  SVN_REPO_URL: https://invalid.invalid/svn
+
+jobs:
+  # ---------------------------------------------------------------------
+  # Structural sanity: action.yml has the inputs and steps we depend on.
+  # ---------------------------------------------------------------------
+  action-yaml-structure:
+    name: action.yml structural sanity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install yq
+        run: sudo snap install yq || sudo apt-get install -y yq
+
+      - name: Verify action.yml shape
+        run: |
+          ACTION=actions/release/latex-manual/action.yml
+          for key in name description inputs runs; do
+            if [ "$(yq eval ".${key}" "$ACTION")" = "null" ]; then
+              echo "::error::action.yml is missing top-level '$key'"
+              exit 1
+            fi
+          done
+          # Every input the action contract advertises must exist.
+          for input in python-version tex-files \
+                       markdown-input-dir latex-output-dir \
+                       svn-username svn-password svn-repo-url \
+                       upload-to-release github-token; do
+            if [ "$(yq eval ".inputs.\"$input\"" "$ACTION")" = "null" ]; then
+              echo "::error::action.yml is missing input '$input'"
+              exit 1
+            fi
+          done
+          # Inputs explicitly removed in the slim refactor — guard against
+          # accidental reintroduction (no PM coupling, ddocs is hardcoded
+          # to the upstream git URL, artifact upload always fires when
+          # there are PDFs).
+          for unwanted in package-manager dependency-groups install-extras \
+                          poetry-extras pixi-environments \
+                          pixi-activate-environment verify-lock ddocs-source \
+                          upload-artifacts artifact-name artifact-retention-days; do
+            if [ "$(yq eval ".inputs.\"$unwanted\"" "$ACTION")" != "null" ]; then
+              echo "::error::action.yml must NOT have input '$unwanted' (slim refactor removed it)"
+              exit 1
+            fi
+          done
+          # SVN creds must remain required — silently using empty strings
+          # would mask credential-passing bugs in consumers.
+          for input in svn-username svn-password svn-repo-url; do
+            REQ=$(yq eval ".inputs.\"$input\".required" "$ACTION")
+            if [ "$REQ" != "true" ]; then
+              echo "::error::input '$input' must be required, got: $REQ"
+              exit 1
+            fi
+          done
+          # tex-files must NOT be required — empty means "skip pdflatex".
+          REQ=$(yq eval '.inputs."tex-files".required' "$ACTION")
+          if [ "$REQ" = "true" ]; then
+            echo "::error::tex-files must not be required (empty = skip pdflatex)"
+            exit 1
+          fi
+          USING=$(yq eval ".runs.using" "$ACTION")
+          if [ "$USING" != "composite" ]; then
+            echo "::error::action.runs.using must be 'composite', got: $USING"
+            exit 1
+          fi
+          STEPS=$(yq eval ".runs.steps[].name" "$ACTION")
+          for expected in "Install System Dependencies" "Set up Python" "Install ddocs" \
+                          "Checkout Deltares LaTeX Styles" "Generate LaTeX from Markdown" \
+                          "Install LaTeX" "Compile PDF Documents" \
+                          "Upload PDF Artifacts" "Upload PDFs to Release"; do
+            if ! echo "$STEPS" | grep -Fxq "$expected"; then
+              echo "::error::action.yml is missing step: $expected"
+              exit 1
+            fi
+          done
+          echo "action.yml structure OK"
+
+      - name: Verify pdflatex-related steps are gated on tex-files
+        run: |
+          ACTION=actions/release/latex-manual/action.yml
+          for step in "Install LaTeX" "Compile PDF Documents" "Upload PDF Artifacts" "Get Release Tag" "Upload PDFs to Release"; do
+            COND=$(yq eval ".runs.steps[] | select(.name == \"$step\") | .if" "$ACTION")
+            if ! echo "$COND" | grep -q "tex-files != ''"; then
+              echo "::error::step '$step' must be gated on tex-files != ''. Got: $COND"
+              exit 1
+            fi
+          done
+          echo "pdflatex gating OK"
+
+  # ---------------------------------------------------------------------
+  # Happy path: install + ddocs + svn-graceful-failure + markdown-to-latex.
+  # Asserts the converted .tex appears, and that pdflatex/texlive did NOT
+  # run (tex-files is empty by default).
+  # ---------------------------------------------------------------------
+  convert-markdown-to-latex:
+    name: convert markdown → latex (no pdflatex)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage fixture
+        run: |
+          mkdir -p docs/mkdocs/user_docs docs/end-user-docs/source
+          cp $MD_INPUT/index.md docs/mkdocs/user_docs/index.md
+
+      - name: Run action
+        uses: ./actions/release/latex-manual
+        with:
+          svn-username: ${{ env.SVN_USERNAME }}
+          svn-password: ${{ env.SVN_PASSWORD }}
+          svn-repo-url: ${{ env.SVN_REPO_URL }}
+
+      - name: Verify ddocs is on PATH after install
+        run: ddocs --version
+
+      - name: Verify ddocs converted markdown → latex
+        run: |
+          # ddocs writes one .tex per .md (default pattern '*.md').
+          # Our fixture has a single index.md, so index.tex must appear.
+          test -f docs/end-user-docs/source/index.tex || {
+            echo "::error::ddocs markdown-to-latex did not produce index.tex"
+            ls -la docs/end-user-docs/source
+            exit 1
+          }
+
+      - name: Verify pdflatex was NOT run (tex-files empty)
+        run: |
+          if compgen -G "docs/end-user-docs/source/*.aux" > /dev/null; then
+            echo "::error::found .aux files — pdflatex ran when it shouldn't have"; exit 1
+          fi
+          if command -v pdflatex >/dev/null; then
+            echo "::error::pdflatex installed — texlive install ran when it shouldn't have"; exit 1
+          fi
+
+  # ---------------------------------------------------------------------
+  # python-version is honored. The action passes it to actions/setup-python;
+  # asserting the resulting interpreter version proves the wiring works.
+  # ---------------------------------------------------------------------
+  python-version-pin:
+    name: python-version pin honored (3.13)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage fixture
+        run: |
+          mkdir -p docs/mkdocs/user_docs docs/end-user-docs/source
+          cp $MD_INPUT/index.md docs/mkdocs/user_docs/index.md
+
+      - name: Run action with python-version=3.13
+        uses: ./actions/release/latex-manual
+        with:
+          python-version: '3.13'
+          svn-username: ${{ env.SVN_USERNAME }}
+          svn-password: ${{ env.SVN_PASSWORD }}
+          svn-repo-url: ${{ env.SVN_REPO_URL }}
+
+      - name: Verify Python 3.13 active
+        run: python -c "import sys; assert sys.version_info[:2] == (3, 13), sys.version"
+
+  # ---------------------------------------------------------------------
+  # End-to-end pdflatex run. Heavy (~5 min for texlive install) so manual
+  # only. Validates that with real tex-files values the texlive install,
+  # 3 pdflatex passes, bibtex citation handling, and the comma-separated
+  # multi-file loop all wire up correctly.
+  #
+  # Two .tex fixtures cover two paths through the action's compile loop:
+  #   * sample.tex   — has \cite{} + bibliography → exercises the bibtex
+  #                    branch that greps the .aux file for \citation.
+  #   * sample2.tex  — plain document with no citations → exercises the
+  #                    comma-separated multi-file path without conflating
+  #                    it with the bibtex branch.
+  # ---------------------------------------------------------------------
+  pdf-compile-end-to-end:
+    name: end-to-end pdflatex compile (workflow_dispatch only)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage fixture
+        run: |
+          mkdir -p docs/mkdocs/user_docs docs/end-user-docs/source
+          cp $MD_INPUT/index.md docs/mkdocs/user_docs/index.md
+          # Action runs `pdflatex <name>.tex` from inside latex-output-dir,
+          # so all three files (two .tex + the .bib) live there.
+          cp tests/data/release-latex-manual/end-to-end/sample.tex  docs/end-user-docs/source/sample.tex
+          cp tests/data/release-latex-manual/end-to-end/sample2.tex docs/end-user-docs/source/sample2.tex
+          cp tests/data/release-latex-manual/end-to-end/refs.bib    docs/end-user-docs/source/refs.bib
+
+      - name: Run action with comma-separated tex-files
+        uses: ./actions/release/latex-manual
+        with:
+          tex-files: 'sample,sample2'
+          svn-username: ${{ env.SVN_USERNAME }}
+          svn-password: ${{ env.SVN_PASSWORD }}
+          svn-repo-url: ${{ env.SVN_REPO_URL }}
+
+      - name: Verify both PDFs were produced
+        run: |
+          for f in sample sample2; do
+            test -f docs/end-user-docs/source/$f.pdf || {
+              echo "::error::$f.pdf not found"; ls -la docs/end-user-docs/source; exit 1;
+            }
+          done
+
+      - name: Verify pdflatex actually ran for both (.aux exists)
+        run: |
+          test -f docs/end-user-docs/source/sample.aux
+          test -f docs/end-user-docs/source/sample2.aux
+
+      - name: Verify bibtex branch fired for sample.tex
+        run: |
+          # The action greps .aux for \citation and runs bibtex when found.
+          # bibtex produces a .bbl file alongside the .aux. Its presence
+          # proves the bibtex branch executed (vs being silently skipped).
+          test -f docs/end-user-docs/source/sample.bbl || {
+            echo "::error::sample.bbl missing — bibtex did not run on sample.tex"
+            ls -la docs/end-user-docs/source
+            exit 1
+          }
+          # And sample2 (no citations) must NOT have a .bbl.
+          if [ -f docs/end-user-docs/source/sample2.bbl ]; then
+            echo "::error::sample2.bbl exists — bibtex ran on a doc with no \\cite"
+            exit 1
+          fi

@@ -1,0 +1,16 @@
+\documentclass{article}
+\title{release-latex-manual end-to-end test}
+\author{CI}
+\begin{document}
+\maketitle
+This document exists only so the workflow_dispatch end-to-end job has a
+self-contained .tex file that pdflatex can compile without the Deltares
+SVN style files (which are unavailable in CI).
+
+It also cites a stub source~\cite{stub2026} so the action's bibtex branch
+(triggered by the `\textbackslash{}citation` marker in the .aux file) is
+exercised end-to-end.
+
+\bibliographystyle{plain}
+\bibliography{refs}
+\end{document}
