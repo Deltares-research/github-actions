@@ -21,4 +21,4 @@ Setup Python with uv package manager.
 Use `actions/python-setup/uv` (or `/poetry`, `/pixi`) for most development workflows.
 
 ### For Documentation
-Use `actions/mkdocs-deploy/complete`, which delegates Python setup to these actions internally.
+Use `actions/mkdocs-deploy`, which delegates Python setup to these actions internally.
