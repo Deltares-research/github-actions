@@ -293,19 +293,10 @@ runs:
           echo "::warning::Tag not found in git: $NEXT_VERSION"
         fi
 
-        # Detect prerelease in either PEP 440 form (e.g. 1.0.0b1, 1.0.0a3,
-        # 1.0.0rc2, 1.0.0.dev1) or SemVer form (e.g. 1.0.0-beta.1, 1.0.0-rc.2).
-        # Substring matching via GitHub `contains()` is too coarse — it
-        # mis-classifies plain "1.0.0b1" as a release (no "beta") and any
-        # tag_format containing the letter "b" as a prerelease. Compute it
-        # here in shell instead.
-        if [[ "$NEXT_VERSION" =~ [0-9]+(a|b|rc|dev)[0-9]+ ]] \
-           || [[ "$NEXT_VERSION" =~ \.dev[0-9]+ ]] \
-           || [[ "$NEXT_VERSION" =~ -(alpha|beta|rc|pre|dev) ]]; then
-          IS_PRERELEASE=true
-        else
-          IS_PRERELEASE=false
-        fi
+        # Detect prerelease in either PEP 440 (1.0.0b1, 1.0.0.dev1, ...) or
+        # SemVer (1.0.0-beta.1, ...) form. Logic lives in the script below so
+        # it can be unit-tested directly; see test.release.unit.yml.
+        IS_PRERELEASE=$(bash "$GITHUB_ACTION_PATH/scripts/is-prerelease.sh" "$NEXT_VERSION")
         echo "Prerelease: $IS_PRERELEASE"
 
         echo "NEW_VERSION=$NEXT_VERSION" >> $GITHUB_OUTPUT
