@@ -5,7 +5,7 @@ name: Test mkdocs-deploy
 # mkdocs-deploy action runs. This means any `mike deploy --push <version>`
 # invoked by the action goes to that bare repo rather than to the real
 # github.com remote — tests leave no traces on the repo's real gh-pages
-# branch, regardless of which deploy-types fire on which event.
+# branch, regardless of which triggers fire on which event.
 #
 # Helper scripts under .github/workflows/scripts/:
 #   * assert-gh-pages-has-version.sh <version>  — assert mike pushed <version>
@@ -18,7 +18,7 @@ on:
 
 jobs:
   setup-uv-defaults:
-    name: setup uv (defaults, dependency-groups='docs')
+    name: setup uv (defaults, install-groups='docs')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -38,7 +38,7 @@ jobs:
       - name: Run action with all defaults
         uses: ./actions/mkdocs-deploy
         with:
-          deploy-types: 'release'  # release event never matches; deploy step skipped
+          triggers: 'release'  # release event never matches; deploy step skipped
           deploy-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Verify defaults applied (Python 3.12, uv, mike+mkdocs installed)
@@ -47,11 +47,11 @@ jobs:
           uv --version
           uv run python -c "import mike, mkdocs"
 
-      - name: Verify nothing was pushed to fake remote (deploy-types='release' on non-release event)
+      - name: Verify nothing was pushed to fake remote (triggers='release' on non-release event)
         run: bash .github/workflows/scripts/assert-no-gh-pages-push.sh
 
   setup-uv-custom-groups:
-    name: setup uv (custom dependency-groups)
+    name: setup uv (custom install-groups)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -69,8 +69,8 @@ jobs:
       - name: Run action
         uses: ./actions/mkdocs-deploy
         with:
-          dependency-groups: 'dev test'
-          deploy-types: 'release'
+          install-groups: 'dev test'
+          triggers: 'release'
           deploy-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Verify only requested groups installed
@@ -81,8 +81,8 @@ jobs:
             exit 1
           fi
 
-  setup-uv-with-poetry-extras-input:
-    name: setup uv (dependency-groups + poetry-extras both passed through)
+  setup-uv-with-extras:
+    name: setup uv (install-groups + install-extras both passed through)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -100,19 +100,16 @@ jobs:
       - name: Run action
         uses: ./actions/mkdocs-deploy
         with:
-          dependency-groups: 'dev'
-          poetry-extras: 'docs'
-          deploy-types: 'release'
+          install-groups: 'dev'
+          install-extras: 'docs'
+          triggers: 'release'
           deploy-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Verify both group (pytest) and extra (sphinx) installed
-        # uv passes BOTH install-groups and install-extras unconditionally,
-        # so both pytest (dev group) and sphinx (docs extra) should be present.
-        run: |
-          uv run python -c "import pytest, sphinx"
+        run: uv run python -c "import pytest, sphinx"
 
   setup-poetry-with-groups:
-    name: setup poetry (dependency-groups via --with)
+    name: setup poetry (install-groups via --with)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -133,46 +130,40 @@ jobs:
         uses: ./actions/mkdocs-deploy
         with:
           package-manager: 'poetry'
-          dependency-groups: 'docs'
-          deploy-types: 'release'
+          install-groups: 'docs'
+          triggers: 'release'
           deploy-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Verify docs group installed (mike + mkdocs)
         run: poetry run python -c "import mike, mkdocs"
 
-  setup-poetry-extras-overrides-groups:
-    name: setup poetry (poetry-extras overrides dependency-groups)
+  setup-poetry-with-groups-and-extras:
+    name: setup poetry (install-groups + install-extras both passed through)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Stage fixture (poetry-extras - mike+mkdocs are docs extras)
+      - name: Stage fixture (poetry combined - dev group + docs extra)
         run: |
-          cp tests/data/mkdocs-deploy/poetry-extras/pyproject.toml ./pyproject.toml
-          cp tests/data/mkdocs-deploy/poetry-extras/poetry.lock ./poetry.lock
-          cp tests/data/mkdocs-deploy/_site/mkdocs.yml ./mkdocs.yml
-          cp -r tests/data/mkdocs-deploy/_site/site_docs ./site_docs
+          cp tests/data/poetry/combined/pyproject.toml ./pyproject.toml
+          cp tests/data/poetry/combined/poetry.lock ./poetry.lock
 
       - name: Set up fake git remote
         uses: ./.github/workflows/test-helpers/setup-fake-remote
 
-      - name: Run action with bogus group + valid extras
-        # If the override works, install-groups is sent as '' → poetry runs
-        # `install --extras docs` (no --with). The bogus 'nonexistent' group
-        # is never passed and so cannot fail. If the override is broken,
-        # poetry would error: "Group(s) not found: nonexistent".
+      - name: Run action
         uses: ./actions/mkdocs-deploy
         with:
           package-manager: 'poetry'
-          dependency-groups: 'nonexistent'
-          poetry-extras: 'docs'
-          deploy-types: 'release'
+          install-groups: 'dev'
+          install-extras: 'docs'
+          triggers: 'release'
           deploy-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Verify extras path took effect
-        run: poetry run python -c "import mike, mkdocs"
+      - name: Verify both group (pytest) and extra (sphinx) installed
+        run: poetry run python -c "import pytest, sphinx"
 
   setup-pixi:
     name: setup pixi (default environment)
@@ -196,7 +187,7 @@ jobs:
         uses: ./actions/mkdocs-deploy
         with:
           package-manager: 'pixi'
-          deploy-types: 'release'
+          triggers: 'release'
           deploy-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Verify mike + mkdocs installed in pixi env
@@ -222,8 +213,8 @@ jobs:
         uses: ./actions/mkdocs-deploy
         with:
           python-version: '3.13'
-          dependency-groups: 'docs'
-          deploy-types: 'release'
+          install-groups: 'docs'
+          triggers: 'release'
           deploy-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Verify Python 3.13
@@ -248,8 +239,8 @@ jobs:
       - name: Run action
         uses: ./actions/mkdocs-deploy
         with:
-          dependency-groups: 'docs'
-          deploy-types: 'release'
+          install-groups: 'docs'
+          triggers: 'release'
           deploy-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Verify git config matches github.actor
@@ -290,12 +281,12 @@ jobs:
       - name: Set up fake git remote
         uses: ./.github/workflows/test-helpers/setup-fake-remote
 
-      - name: Run action with deploy-types=pr
+      - name: Run action with triggers=pr
         uses: ./actions/mkdocs-deploy
         with:
           package-manager: 'uv'
-          dependency-groups: 'docs'
-          deploy-types: 'pr'
+          install-groups: 'docs'
+          triggers: 'pr'
           deploy-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Verify fake gh-pages has develop version
@@ -320,12 +311,12 @@ jobs:
       - name: Set up fake git remote
         uses: ./.github/workflows/test-helpers/setup-fake-remote
 
-      - name: Run action with deploy-types=pr
+      - name: Run action with triggers=pr
         uses: ./actions/mkdocs-deploy
         with:
           package-manager: 'poetry'
-          dependency-groups: 'docs'
-          deploy-types: 'pr'
+          install-groups: 'docs'
+          triggers: 'pr'
           deploy-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Verify fake gh-pages has develop version
@@ -350,18 +341,18 @@ jobs:
       - name: Set up fake git remote
         uses: ./.github/workflows/test-helpers/setup-fake-remote
 
-      - name: Run action with deploy-types=pr
+      - name: Run action with triggers=pr
         uses: ./actions/mkdocs-deploy
         with:
           package-manager: 'pixi'
-          deploy-types: 'pr'
+          triggers: 'pr'
           deploy-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Verify fake gh-pages has develop version
         run: bash .github/workflows/scripts/assert-gh-pages-has-version.sh develop
 
   deploy-step-gating-no-fire:
-    # Manual only. Passes ALL three deploy-types so each gate is evaluated;
+    # Manual only. Passes ALL three triggers so each gate is evaluated;
     # the workflow_dispatch event matches NONE of them, so all three deploy
     # steps must skip. With fake git in place this is also safe if any
     # incorrectly fired.
@@ -383,11 +374,11 @@ jobs:
       - name: Set up fake git remote
         uses: ./.github/workflows/test-helpers/setup-fake-remote
 
-      - name: Run action with all deploy-types
+      - name: Run action with all triggers
         uses: ./actions/mkdocs-deploy
         with:
-          dependency-groups: 'docs'
-          deploy-types: 'pr,main,release'
+          install-groups: 'docs'
+          triggers: 'pr,main,release'
           deploy-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Verify NO deploy step fired (fake gh-pages still empty)
@@ -411,13 +402,13 @@ jobs:
               exit 1
             fi
           done
-          for input in python-version package-manager dependency-groups poetry-extras deploy-types deploy-token release-tag; do
+          for input in python-version package-manager install-groups install-extras triggers deploy-token release-tag; do
             if [ "$(yq eval ".inputs.\"$input\"" "$ACTION")" = "null" ]; then
               echo "::error::action.yml is missing input '$input'"
               exit 1
             fi
           done
-          for input in deploy-types deploy-token; do
+          for input in triggers deploy-token; do
             REQ=$(yq eval ".inputs.\"$input\".required" "$ACTION")
             if [ "$REQ" != "true" ]; then
               echo "::error::input '$input' must be required, got: $REQ"
