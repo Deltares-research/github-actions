@@ -38,7 +38,7 @@ Examples:
 
 - **[test.mkdocs-deploy.unit.yml](test.mkdocs-deploy.unit.yml)**: Tests for the mkdocs-deploy action
   - Setup wiring across uv, poetry, and pixi (with `mike` + `mkdocs` installed)
-  - `install-groups` + `install-extras` both pass through (uv and poetry)
+  - `install-groups` propagates through to `python-setup/{uv,poetry}` (extras are intentionally not supported — doc deps belong in groups)
   - `python-version` pin honored (3.13)
   - `git config` set to `github.actor` after action runs
   - **End-to-end PR deploy** for each PM: mike actually runs and pushes `develop/` to a fake `gh-pages` (PR-event jobs only)
@@ -53,7 +53,6 @@ Examples:
 
   Fixtures under [`tests/data/mkdocs-deploy/`](../../tests/data/mkdocs-deploy/):
   - `uv/`, `poetry/`, `pixi/` — pyproject + lockfile per PM with `mike` + `mkdocs` in a docs *group*
-  - `poetry-extras/` — same packages but defined as a poetry *extra* (no group)
   - `_site/mkdocs.yml` + `_site/site_docs/index.md` — minimal mkdocs site (uses `site_docs/` to avoid clobbering the repo's tracked `docs/`)
 
 ## Running Tests

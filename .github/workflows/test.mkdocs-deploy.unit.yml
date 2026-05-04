@@ -87,33 +87,6 @@ jobs:
             exit 1
           fi
 
-  setup-uv-with-extras:
-    name: setup uv (install-groups + install-extras both passed through)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Stage fixture (uv combined - dev group + docs extra)
-        run: |
-          cp tests/data/uv/combined/pyproject.toml ./pyproject.toml
-          cp tests/data/uv/combined/uv.lock ./uv.lock
-
-      - name: Set up fake git remote
-        uses: ./.github/workflows/test-helpers/setup-fake-remote
-
-      - name: Run action
-        uses: ./actions/mkdocs-deploy
-        with:
-          install-groups: 'dev'
-          install-extras: 'docs'
-          trigger: ''
-          deploy-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Verify both group (pytest) and extra (sphinx) installed
-        run: uv run python -c "import pytest, sphinx"
-
   setup-poetry-with-groups:
     name: setup poetry (install-groups via --with)
     runs-on: ubuntu-latest
@@ -141,65 +114,6 @@ jobs:
           deploy-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Verify docs group installed (mike + mkdocs)
-        run: poetry run python -c "import mike, mkdocs"
-
-  setup-poetry-with-groups-and-extras:
-    name: setup poetry (install-groups + install-extras both passed through)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Stage fixture (poetry combined - dev group + docs extra)
-        run: |
-          cp tests/data/poetry/combined/pyproject.toml ./pyproject.toml
-          cp tests/data/poetry/combined/poetry.lock ./poetry.lock
-
-      - name: Set up fake git remote
-        uses: ./.github/workflows/test-helpers/setup-fake-remote
-
-      - name: Run action
-        uses: ./actions/mkdocs-deploy
-        with:
-          package-manager: 'poetry'
-          install-groups: 'dev'
-          install-extras: 'docs'
-          trigger: ''
-          deploy-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Verify both group (pytest) and extra (sphinx) installed
-        run: poetry run python -c "import pytest, sphinx"
-
-  setup-poetry-with-extras-only:
-    name: setup poetry (mike installed via extras only, no group)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Stage fixture (poetry-extras - mike+mkdocs are docs extras, no group)
-        run: |
-          cp tests/data/mkdocs-deploy/poetry-extras/pyproject.toml ./pyproject.toml
-          cp tests/data/mkdocs-deploy/poetry-extras/poetry.lock ./poetry.lock
-
-      - name: Set up fake git remote
-        uses: ./.github/workflows/test-helpers/setup-fake-remote
-
-      - name: Run action with install-extras only (no install-groups)
-        # The fixture has no 'docs' group — only a 'docs' extra. We must opt
-        # out of the action's default install-groups='docs' by setting it to
-        # ''; otherwise poetry would error with "Group(s) not found: docs".
-        uses: ./actions/mkdocs-deploy
-        with:
-          package-manager: 'poetry'
-          install-groups: ''
-          install-extras: 'docs'
-          trigger: ''
-          deploy-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Verify mike + mkdocs installed via extras path
         run: poetry run python -c "import mike, mkdocs"
 
   setup-pixi:
@@ -442,7 +356,7 @@ jobs:
               exit 1
             fi
           done
-          for input in python-version package-manager install-groups install-extras trigger deploy-token release-tag release-alias main-set-default release-prerelease; do
+          for input in python-version package-manager install-groups trigger deploy-token release-tag release-alias main-set-default release-prerelease; do
             if [ "$(yq eval ".inputs.\"$input\"" "$ACTION")" = "null" ]; then
               echo "::error::action.yml is missing input '$input'"
               exit 1
