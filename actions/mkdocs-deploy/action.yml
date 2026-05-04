@@ -39,10 +39,10 @@ inputs:
     description: 'Which deploy path to run on this invocation. The caller workflow must gate on the matching GitHub event via job-level `if:` — the composite does not double-check `github.event_name`. Choose one of {pr, main, release}. Example: "main".'
     required: true
   deploy-token:
-    description: 'GitHub token used by mike to push to gh-pages. Needs `contents: write`. Example: "${{ secrets.GITHUB_TOKEN }}".'
+    description: 'GitHub token used by mike to push to gh-pages. Needs `contents: write`. Pass secrets.GITHUB_TOKEN (or a PAT with the same permission).'
     required: true
   release-tag:
-    description: 'Release tag deployed by mike when the release path fires. Typically the release event payload tag. Example: "v1.0.0", "${{ github.event.release.tag_name }}".'
+    description: 'Release tag deployed by mike when the release path fires. On `release` events, pass github.event.release.tag_name. Example: "v1.0.0".'
     required: false
     default: ''
   release-alias:
@@ -54,7 +54,7 @@ inputs:
     required: false
     default: 'true'
   release-prerelease:
-    description: 'Whether the release being deployed is a prerelease (alpha/beta/rc). When "true", the release deploy path publishes the tag alone — no `--update-aliases` and no `set-default` — so the prerelease does not displace the stable served default. Typically set to "${{ github.event.release.prerelease }}" or computed from the tag pattern. Example: "true", "false".'
+    description: 'Whether the release being deployed is a prerelease (alpha/beta/rc). When "true", the release deploy path publishes the tag alone — no `--update-aliases` and no `set-default` — so the prerelease does not displace the stable served default. On `release` events, pass github.event.release.prerelease; otherwise compute it from the tag pattern in the caller. Example: "true", "false".'
     required: false
     default: 'false'
 
