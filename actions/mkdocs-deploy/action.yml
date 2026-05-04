@@ -4,7 +4,10 @@ description: |
   versioned MkDocs documentation to GitHub Pages using mike.
 
   Python setup is delegated to `actions/python-setup/<package-manager>` —
-  install-groups and install-extras are forwarded unchanged.
+  install-groups is forwarded unchanged. Doc-builder deps (mike, mkdocs,
+  plugins) belong in a PEP 735 dependency group, not in PEP 621 extras —
+  extras leak into the published wheel's metadata, which is wrong for
+  CI-only deps. The action only accepts groups for that reason.
 
   Each invocation runs exactly one deploy path, selected by `trigger`. Event
   matching is the caller's responsibility — gate the calling job on the right
@@ -31,10 +34,6 @@ inputs:
     description: 'PEP 735 dependency groups to install (uv --group / poetry --with). Space- or comma-separated. Example: "docs", "dev docs", "dev,docs".'
     required: false
     default: 'docs'
-  install-extras:
-    description: 'PEP 621 optional-dependency extras to install (uv --extra / poetry --extras). Space- or comma-separated. Coexists with install-groups. Example: "docs", "dev docs", "dev,docs".'
-    required: false
-    default: ''
   trigger:
     description: 'Which deploy path to run on this invocation. The caller workflow must gate on the matching GitHub event via job-level `if:` — the composite does not double-check `github.event_name`. Choose one of {pr, main, release}. Example: "main".'
     required: true
@@ -68,7 +67,6 @@ runs:
         echo "Python version:    ${{ inputs.python-version }}"
         echo "Package manager:   ${{ inputs.package-manager }}"
         echo "Install groups:    ${{ inputs.install-groups }}"
-        echo "Install extras:    ${{ inputs.install-extras }}"
         echo "Trigger:           ${{ inputs.trigger }}"
         echo "Release tag:       ${{ inputs.release-tag }}"
         echo "Release alias:     ${{ inputs.release-alias }}"
@@ -85,7 +83,6 @@ runs:
       with:
         python-version: ${{ inputs.python-version }}
         install-groups: ${{ inputs.install-groups }}
-        install-extras: ${{ inputs.install-extras }}
 
     - name: Setup Python with Poetry
       if: inputs.package-manager == 'poetry'
@@ -93,7 +90,6 @@ runs:
       with:
         python-version: ${{ inputs.python-version }}
         install-groups: ${{ inputs.install-groups }}
-        install-extras: ${{ inputs.install-extras }}
 
     - name: Setup Python with Pixi
       if: inputs.package-manager == 'pixi'
