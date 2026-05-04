@@ -371,20 +371,24 @@ jobs:
           verify-lock: 'true'
 
       - name: Verify sync reconciled (sphinx in, pytest out)
+        # Asserts against `poetry show` (poetry's authoritative installed-package
+        # list) rather than `import pytest`. After poetry uninstalls pytest the
+        # empty pytest/ directory can linger in site-packages and Python's PEP 420
+        # namespace-package mechanism makes `import pytest` succeed with
+        # __file__=None — even though pytest is functionally gone.
         run: |
-          echo "=== diagnostic: venv state ==="
-          poetry env info
-          VENV_PATH=$(poetry env info --path)
-          echo "Looking for pytest in venv site-packages..."
-          ls -la "$VENV_PATH"/lib/python*/site-packages/ 2>/dev/null | grep -iE 'pytest|sphinx' || echo "  (neither pytest nor sphinx found in venv site-packages)"
-          echo "=== sphinx import resolution ==="
-          poetry run python -c "import sphinx; print('sphinx from:', sphinx.__file__)"
-          echo "=== pytest import resolution ==="
-          if poetry run python -c "import pytest; print('pytest from:', pytest.__file__)" 2>&1; then
-            echo "::error::pytest is still importable after poetry sync --extras docs (should be gone)"
+          echo "=== poetry show (authoritative installed list) ==="
+          poetry show
+          echo
+          if ! poetry show | grep -qE '^sphinx +'; then
+            echo "::error::sphinx should be installed after poetry sync --extras docs"
             exit 1
           fi
-          echo "PASS: sync correctly removed pytest"
+          if poetry show | grep -qE '^pytest +'; then
+            echo "::error::pytest should NOT be in poetry's installed list after poetry sync --extras docs"
+            exit 1
+          fi
+          echo "PASS: sphinx in, pytest out"
 
   messy-input-parsing:
     name: tolerate whitespace and mixed separators in install-groups
