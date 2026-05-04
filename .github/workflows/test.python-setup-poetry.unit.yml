@@ -289,7 +289,7 @@ jobs:
         id: verify
         uses: actions/cache/restore@v4
         with:
-          path: ~/.cache/pypoetry
+          path: ~/.virtualenvs
           key: poetry-${{ runner.os }}-py3.12-poetry2.3.3-${{ hashFiles('**/poetry.lock') }}
           lookup-only: true
 
@@ -322,7 +322,7 @@ jobs:
         id: verify
         uses: actions/cache/restore@v4
         with:
-          path: ~/.cache/pypoetry
+          path: ~/.virtualenvs
           key: poetry-${{ runner.os }}-py3.12-poetry2.3.3-${{ hashFiles('**/poetry.lock') }}
           lookup-only: true
 
