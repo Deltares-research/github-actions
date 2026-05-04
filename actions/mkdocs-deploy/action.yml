@@ -6,17 +6,17 @@ description: |
   Python setup is delegated to `actions/python-setup/<package-manager>` —
   install-groups and install-extras are forwarded unchanged.
 
-  After setup, three deploy paths are conditionally enabled via `triggers`,
-  each ALSO gated on the matching GitHub event so a single trigger value can
-  safely be reused across all three deploy events:
-    * pr      → on `pull_request`             → mike deploy --push develop
-    * main    → on `push` to `refs/heads/main` → mike deploy --push main
-                                                  (+ set-default main, unless main-set-default=false)
-    * release → on `release`                  → if release-prerelease=true:
-                                                    mike deploy --push <release-tag>
-                                                  else:
-                                                    mike deploy --push --update-aliases <release-tag> <release-alias>
-                                                    + set-default <release-alias>
+  Each invocation runs exactly one deploy path, selected by `trigger`. Event
+  matching is the caller's responsibility — gate the calling job on the right
+  GitHub event with a job-level `if:`. The composite trusts what it is told:
+    * pr      → mike deploy --push develop
+    * main    → mike deploy --push main
+                  (+ set-default main, unless main-set-default=false)
+    * release → if release-prerelease=true:
+                    mike deploy --push <release-tag>
+                else:
+                    mike deploy --push --update-aliases <release-tag> <release-alias>
+                    + set-default <release-alias>
 
 inputs:
   python-version:
@@ -35,8 +35,8 @@ inputs:
     description: 'PEP 621 optional-dependency extras to install (uv --extra / poetry --extras). Space- or comma-separated. Coexists with install-groups. Example: "docs", "dev docs", "dev,docs".'
     required: false
     default: ''
-  triggers:
-    description: 'Which deploy paths to enable. Comma-separated subset of {pr, main, release}. Each is also gated on the matching GitHub event. Example: "pr", "main,release", "pr,main,release".'
+  trigger:
+    description: 'Which deploy path to run on this invocation. The caller workflow must gate on the matching GitHub event via job-level `if:` — the composite does not double-check `github.event_name`. Choose one of {pr, main, release}. Example: "main".'
     required: true
   deploy-token:
     description: 'GitHub token used by mike to push to gh-pages. Needs `contents: write`. Example: "${{ secrets.GITHUB_TOKEN }}".'
@@ -69,7 +69,7 @@ runs:
         echo "Package manager:   ${{ inputs.package-manager }}"
         echo "Install groups:    ${{ inputs.install-groups }}"
         echo "Install extras:    ${{ inputs.install-extras }}"
-        echo "Triggers:          ${{ inputs.triggers }}"
+        echo "Trigger:           ${{ inputs.trigger }}"
         echo "Release tag:       ${{ inputs.release-tag }}"
         echo "Release alias:     ${{ inputs.release-alias }}"
         echo "Main set-default:  ${{ inputs.main-set-default }}"
@@ -112,7 +112,7 @@ runs:
         echo "::endgroup::"
 
     - name: Deploy PR Documentation
-      if: contains(inputs.triggers, 'pr') && github.event_name == 'pull_request'
+      if: inputs.trigger == 'pr'
       shell: bash
       env:
         ACTIONS_DEPLOY_TOKEN: ${{ inputs.deploy-token }}
@@ -130,7 +130,7 @@ runs:
         echo "::endgroup::"
 
     - name: Deploy Main Documentation
-      if: contains(inputs.triggers, 'main') && github.event_name == 'push' && github.ref == 'refs/heads/main'
+      if: inputs.trigger == 'main'
       shell: bash
       env:
         ACTIONS_DEPLOY_TOKEN: ${{ inputs.deploy-token }}
@@ -158,7 +158,7 @@ runs:
         echo "::endgroup::"
 
     - name: Deploy Release Documentation
-      if: contains(inputs.triggers, 'release') && github.event_name == 'release'
+      if: inputs.trigger == 'release'
       shell: bash
       env:
         ACTIONS_DEPLOY_TOKEN: ${{ inputs.deploy-token }}
