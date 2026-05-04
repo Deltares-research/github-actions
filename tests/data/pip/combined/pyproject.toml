@@ -1,0 +1,16 @@
+[project]
+name = "test-pip-combined"
+version = "0.1.0"
+description = "Fixture for python-setup/pip: pyproject with extras + a separate requirements file"
+requires-python = ">=3.12"
+dependencies = ["requests"]
+
+[project.optional-dependencies]
+docs = ["sphinx"]
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = []

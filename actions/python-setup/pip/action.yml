@@ -1,0 +1,120 @@
+name: 'Setup Python with pip + venv'
+description: 'Create a virtualenv at .venv and install dependencies via pip from requirements files and/or pyproject.toml, with download-cache speedup'
+
+inputs:
+  python-version:
+    description: 'Python version to install. Example: "3.12", "3.13", "3.12.5".'
+    required: false
+    default: '3.12'
+  pip-version:
+    description: 'pip version to pin inside the venv. Empty string means use whatever python -m venv ships, then upgrade to latest. Example: "", "24.3.1", "25.0".'
+    required: false
+    default: ''
+  requirements-files:
+    description: 'Space- or comma-separated requirements files to install with `pip install -r`. Example: "requirements.txt", "requirements.txt requirements-dev.txt", "reqs/base.txt,reqs/dev.txt".'
+    required: false
+    default: ''
+  install-project:
+    description: 'Whether to run `pip install .` to install the current project from pyproject.toml/setup.py. Example: "true", "false".'
+    required: false
+    default: 'false'
+  install-extras:
+    description: 'Comma- or space-separated PEP 621 extras to install when install-project is true (becomes `pip install ".[X,Y]"`). Ignored when install-project is false. Example: "docs", "dev,docs", "dev docs".'
+    required: false
+    default: ''
+  cache-write:
+    description: 'Whether to write to the cache. Set to "false" (or a workflow expression evaluating to "false" on PRs) to skip cache writes and save cache space. Example: "true", "false".'
+    required: false
+    default: 'true'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Restore pip download cache
+      uses: actions/cache/restore@v4
+      id: cache
+      with:
+        path: ~/.cache/pip
+        key: pip-${{ runner.os }}-py${{ inputs.python-version }}-pip${{ inputs.pip-version }}-${{ hashFiles('**/requirements*.txt', '**/pyproject.toml', '**/setup.py', '**/setup.cfg') }}
+
+    - name: Create venv and activate
+      # Activation via GITHUB_PATH puts .venv/bin first on PATH for all
+      # subsequent steps in this job, so plain `python` and `pip` resolve into
+      # the venv without needing per-step `source .venv/bin/activate`.
+      shell: bash
+      run: |
+        echo "::group::Creating venv at .venv"
+        python -m venv .venv
+        echo "$(pwd)/.venv/bin" >> "$GITHUB_PATH"
+        echo "VIRTUAL_ENV=$(pwd)/.venv" >> "$GITHUB_ENV"
+        echo "::endgroup::"
+
+    - name: Upgrade pip
+      shell: bash
+      env:
+        PIP_VERSION: ${{ inputs.pip-version }}
+      run: |
+        echo "::group::Upgrading pip"
+        if [[ -n "$PIP_VERSION" ]]; then
+          .venv/bin/python -m pip install --upgrade "pip==$PIP_VERSION"
+        else
+          .venv/bin/python -m pip install --upgrade pip
+        fi
+        .venv/bin/python -m pip --version
+        echo "::endgroup::"
+
+    - name: Install requirements files
+      if: inputs.requirements-files != ''
+      shell: bash
+      env:
+        REQ_FILES: ${{ inputs.requirements-files }}
+      run: |
+        echo "::group::Installing from requirements files"
+        IFS=' ,' read -r -a files <<< "$REQ_FILES"
+        for f in "${files[@]}"; do
+          if [[ -n "$f" ]]; then
+            echo "Installing from $f"
+            .venv/bin/python -m pip install -r "$f"
+          fi
+        done
+        echo "::endgroup::"
+
+    - name: Install project
+      if: inputs.install-project == 'true'
+      shell: bash
+      env:
+        EXTRAS: ${{ inputs.install-extras }}
+      run: |
+        echo "::group::Installing project"
+        if [[ -n "$EXTRAS" ]]; then
+          # pip's `.[a,b]` syntax requires comma-separated, no spaces inside the
+          # brackets. Normalise: spaces→commas, collapse repeated commas, strip
+          # leading/trailing commas. So "dev docs", "dev,docs", and
+          # " dev , docs " all produce ".[dev,docs]".
+          NORMALIZED=$(echo "$EXTRAS" | tr ' ' ',' | tr -s ',' | sed 's/^,//;s/,$//')
+          echo "Installing project with extras: [$NORMALIZED]"
+          .venv/bin/python -m pip install ".[${NORMALIZED}]"
+        else
+          echo "Installing project (no extras)"
+          .venv/bin/python -m pip install .
+        fi
+        echo "::endgroup::"
+
+    - name: List environment contents
+      shell: bash
+      run: |
+        echo "::group::Installed packages summary"
+        .venv/bin/python -m pip list
+        echo "::endgroup::"
+
+    - name: Save pip download cache
+      if: inputs.cache-write == 'true' && steps.cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: ~/.cache/pip
+        key: pip-${{ runner.os }}-py${{ inputs.python-version }}-pip${{ inputs.pip-version }}-${{ hashFiles('**/requirements*.txt', '**/pyproject.toml', '**/setup.py', '**/setup.cfg') }}

@@ -1,0 +1,369 @@
+name: python-setup/pip - unit
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  defaults:
+    name: defaults (no requirements, no project install)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage fixture
+        run: |
+          cp tests/data/pip/defaults/pyproject.toml ./pyproject.toml
+
+      - name: Run action
+        uses: ./actions/python-setup/pip
+
+      - name: Verify venv exists and is empty of project deps
+        run: |
+          test -x .venv/bin/python || { echo "::error::.venv/bin/python missing"; exit 1; }
+          # No requirements installed, no project installed → requests should NOT be present
+          if pip list | grep -qiE '^requests +'; then
+            echo "::error::requests should NOT be installed when defaults invocation has no inputs"
+            exit 1
+          fi
+          echo "PASS: venv created with no project deps installed"
+
+  python-matrix:
+    name: python-matrix (single requirements file)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage fixture
+        run: |
+          cp tests/data/pip/basic/requirements.txt ./requirements.txt
+
+      - name: Run action
+        uses: ./actions/python-setup/pip
+        with:
+          python-version: ${{ matrix.python-version }}
+          requirements-files: requirements.txt
+
+      - name: Verify Python version + requests installed
+        run: |
+          python -c "import sys; assert sys.version_info[:2] == tuple(map(int, '${{ matrix.python-version }}'.split('.')[:2]))"
+          python -c "import requests; print('requests', requests.__version__)"
+
+  single-requirements-file:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage fixture
+        run: |
+          cp tests/data/pip/basic/requirements.txt ./requirements.txt
+
+      - name: Run action
+        uses: ./actions/python-setup/pip
+        with:
+          requirements-files: requirements.txt
+
+      - name: Verify requests installed
+        run: |
+          python -c "import requests"
+
+  multi-requirements-space:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage fixture
+        run: |
+          cp tests/data/pip/multi-requirements/requirements.txt ./requirements.txt
+          cp tests/data/pip/multi-requirements/requirements-dev.txt ./requirements-dev.txt
+
+      - name: Run action
+        uses: ./actions/python-setup/pip
+        with:
+          requirements-files: 'requirements.txt requirements-dev.txt'
+
+      - name: Verify both files installed
+        run: |
+          python -c "import requests, pytest"
+
+  multi-requirements-comma:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage fixture
+        run: |
+          cp tests/data/pip/multi-requirements/requirements.txt ./requirements.txt
+          cp tests/data/pip/multi-requirements/requirements-dev.txt ./requirements-dev.txt
+
+      - name: Run action
+        uses: ./actions/python-setup/pip
+        with:
+          requirements-files: 'requirements.txt,requirements-dev.txt'
+
+      - name: Verify both files installed
+        run: |
+          python -c "import requests, pytest"
+
+  install-project:
+    name: install-project=true installs main deps from pyproject
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage fixture
+        run: |
+          cp tests/data/pip/defaults/pyproject.toml ./pyproject.toml
+
+      - name: Run action
+        uses: ./actions/python-setup/pip
+        with:
+          install-project: 'true'
+
+      - name: Verify project + main deps installed
+        run: |
+          python -c "import requests"
+          # No extras requested → dev extras (pytest) should NOT be installed
+          if pip list | grep -qiE '^pytest +'; then
+            echo "::error::pytest should NOT be installed without install-extras"
+            exit 1
+          fi
+
+  install-project-with-extra-single:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage fixture
+        run: |
+          cp tests/data/pip/extras/pyproject.toml ./pyproject.toml
+
+      - name: Run action
+        uses: ./actions/python-setup/pip
+        with:
+          install-project: 'true'
+          install-extras: 'docs'
+
+      - name: Verify only docs extra installed
+        run: |
+          python -c "import sphinx"
+          if pip list | grep -qiE '^pytest +'; then
+            echo "::error::pytest (dev extra) should NOT be installed when only docs requested"
+            exit 1
+          fi
+
+  install-project-with-extras-comma:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage fixture
+        run: |
+          cp tests/data/pip/extras/pyproject.toml ./pyproject.toml
+
+      - name: Run action
+        uses: ./actions/python-setup/pip
+        with:
+          install-project: 'true'
+          install-extras: 'dev,docs'
+
+      - name: Verify both extras installed
+        run: |
+          python -c "import pytest, sphinx"
+
+  install-project-with-extras-space:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage fixture
+        run: |
+          cp tests/data/pip/extras/pyproject.toml ./pyproject.toml
+
+      - name: Run action
+        uses: ./actions/python-setup/pip
+        with:
+          install-project: 'true'
+          install-extras: 'dev docs'
+
+      - name: Verify both extras installed
+        run: |
+          python -c "import pytest, sphinx"
+
+  requirements-and-project:
+    name: requirements-files + install-project together
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage fixture
+        run: |
+          cp tests/data/pip/combined/pyproject.toml ./pyproject.toml
+          cp tests/data/pip/combined/requirements-dev.txt ./requirements-dev.txt
+
+      - name: Run action
+        uses: ./actions/python-setup/pip
+        with:
+          requirements-files: requirements-dev.txt
+          install-project: 'true'
+          install-extras: 'docs'
+
+      - name: Verify all three installed (requests from project, pytest from req file, sphinx from extras)
+        run: |
+          python -c "import requests, pytest, sphinx"
+
+  pip-version-pin:
+    name: pip-version pin honored
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage fixture
+        run: |
+          cp tests/data/pip/defaults/pyproject.toml ./pyproject.toml
+
+      - name: Run action with pinned pip version
+        uses: ./actions/python-setup/pip
+        with:
+          pip-version: '24.3.1'
+
+      - name: Verify pinned pip version active
+        run: |
+          INSTALLED=$(pip --version | awk '{print $2}')
+          echo "Installed pip: $INSTALLED"
+          if [ "$INSTALLED" != "24.3.1" ]; then
+            echo "::error::Expected pip 24.3.1, got $INSTALLED"
+            exit 1
+          fi
+
+  venv-activation:
+    name: bare python and pip resolve to .venv after action
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage fixture
+        run: |
+          cp tests/data/pip/defaults/pyproject.toml ./pyproject.toml
+
+      - name: Run action
+        uses: ./actions/python-setup/pip
+
+      - name: Verify PATH was activated correctly
+        run: |
+          PYTHON_PATH=$(which python)
+          PIP_PATH=$(which pip)
+          EXPECTED="$GITHUB_WORKSPACE/.venv/bin"
+          echo "python resolved to: $PYTHON_PATH"
+          echo "pip    resolved to: $PIP_PATH"
+          echo "expected prefix:    $EXPECTED"
+          if [[ "$PYTHON_PATH" != "$EXPECTED"/* ]]; then
+            echo "::error::python is not the venv's python (expected under $EXPECTED, got $PYTHON_PATH)"
+            exit 1
+          fi
+          if [[ "$PIP_PATH" != "$EXPECTED"/* ]]; then
+            echo "::error::pip is not the venv's pip (expected under $EXPECTED, got $PIP_PATH)"
+            exit 1
+          fi
+          if [ "$VIRTUAL_ENV" != "$GITHUB_WORKSPACE/.venv" ]; then
+            echo "::error::VIRTUAL_ENV not set correctly (got '$VIRTUAL_ENV')"
+            exit 1
+          fi
+
+  cache-write-true-saves:
+    name: cache-write=true persists cache
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage fixture with per-run-unique requirements
+        # Inject a comment with github.run_id so hashFiles produces a unique
+        # cache key for this CI run, guaranteeing we start from an empty cache.
+        run: |
+          cp tests/data/pip/basic/requirements.txt ./requirements.txt
+          echo "# test-run-${{ github.run_id }}-write-true" >> requirements.txt
+
+      - name: Run action with cache-write enabled
+        uses: ./actions/python-setup/pip
+        with:
+          requirements-files: requirements.txt
+          cache-write: 'true'
+
+      - name: Wait for cache propagation
+        run: sleep 10
+
+      - name: Look up cache after action ran
+        id: verify
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-py3.12-pip-${{ hashFiles('**/requirements*.txt', '**/pyproject.toml', '**/setup.py', '**/setup.cfg') }}
+          lookup-only: true
+
+      - name: Assert cache was saved
+        run: |
+          if [ "${{ steps.verify.outputs.cache-hit }}" != "true" ]; then
+            echo "::error::cache-write=true should have saved cache, but key was not found"
+            exit 1
+          fi
+          echo "Cache was correctly saved"
+
+  cache-write-false-skips-save:
+    name: cache-write=false skips cache save
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage fixture with per-run-unique requirements
+        run: |
+          cp tests/data/pip/basic/requirements.txt ./requirements.txt
+          echo "# test-run-${{ github.run_id }}-write-false" >> requirements.txt
+
+      - name: Run action with cache-write disabled
+        uses: ./actions/python-setup/pip
+        with:
+          requirements-files: requirements.txt
+          cache-write: 'false'
+
+      - name: Look up cache after action ran
+        id: verify
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-py3.12-pip-${{ hashFiles('**/requirements*.txt', '**/pyproject.toml', '**/setup.py', '**/setup.cfg') }}
+          lookup-only: true
+
+      - name: Assert cache was NOT saved
+        run: |
+          if [ "${{ steps.verify.outputs.cache-hit }}" == "true" ]; then
+            echo "::error::cache-write=false should NOT have saved cache, but key was found"
+            exit 1
+          fi
+          echo "Cache was correctly skipped"
+
+  messy-input-parsing:
+    name: tolerate whitespace and mixed separators in install-extras
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage fixture
+        run: |
+          cp tests/data/pip/extras/pyproject.toml ./pyproject.toml
+
+      - name: Run action with messy extras input
+        uses: ./actions/python-setup/pip
+        with:
+          install-project: 'true'
+          # Leading/trailing whitespace, comma+space mix, repeated separators —
+          # action should normalise to .[dev,docs] for pip.
+          install-extras: '  dev , docs  '
+
+      - name: Verify both extras installed
+        run: |
+          python -c "import pytest, sphinx"
