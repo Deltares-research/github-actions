@@ -292,9 +292,26 @@ runs:
         else
           echo "::warning::Tag not found in git: $NEXT_VERSION"
         fi
+
+        # Detect prerelease in either PEP 440 form (e.g. 1.0.0b1, 1.0.0a3,
+        # 1.0.0rc2, 1.0.0.dev1) or SemVer form (e.g. 1.0.0-beta.1, 1.0.0-rc.2).
+        # Substring matching via GitHub `contains()` is too coarse — it
+        # mis-classifies plain "1.0.0b1" as a release (no "beta") and any
+        # tag_format containing the letter "b" as a prerelease. Compute it
+        # here in shell instead.
+        if [[ "$NEXT_VERSION" =~ [0-9]+(a|b|rc|dev)[0-9]+ ]] \
+           || [[ "$NEXT_VERSION" =~ \.dev[0-9]+ ]] \
+           || [[ "$NEXT_VERSION" =~ -(alpha|beta|rc|pre|dev) ]]; then
+          IS_PRERELEASE=true
+        else
+          IS_PRERELEASE=false
+        fi
+        echo "Prerelease: $IS_PRERELEASE"
+
         echo "NEW_VERSION=$NEXT_VERSION" >> $GITHUB_OUTPUT
         echo "CHANGELOG_FILE=$CHANGELOG_FILE" >> $GITHUB_OUTPUT
         echo "WORK_DIR=$WORK_DIR" >> $GITHUB_OUTPUT
+        echo "IS_PRERELEASE=$IS_PRERELEASE" >> $GITHUB_OUTPUT
         echo "::endgroup::"
 
     - name: Update lock file (uv)
@@ -414,7 +431,7 @@ runs:
         tag_name: ${{ steps.bump_version.outputs.NEW_VERSION }}
         body: ${{ steps.release_notes.outputs.body }}
         draft: ${{ inputs.draft == 'true' }}
-        prerelease: ${{ contains(steps.bump_version.outputs.NEW_VERSION, 'alpha') || contains(steps.bump_version.outputs.NEW_VERSION, 'beta') || contains(steps.bump_version.outputs.NEW_VERSION, 'rc') }}
+        prerelease: ${{ steps.bump_version.outputs.IS_PRERELEASE == 'true' }}
         files: ${{ inputs.build-wheel == 'true' && env.WHEEL_PATH || '' }}
 
     - name: Release summary
