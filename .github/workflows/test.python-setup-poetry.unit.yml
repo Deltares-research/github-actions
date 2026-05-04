@@ -364,7 +364,7 @@ jobs:
             exit 1
           fi
 
-      - name: Second run — extras=docs (should reconcile: remove pytest, add sphinx)
+      - name: 'Second run — extras=docs (should reconcile: remove pytest, add sphinx)'
         uses: ./actions/python-setup/poetry
         with:
           install-extras: 'docs'
