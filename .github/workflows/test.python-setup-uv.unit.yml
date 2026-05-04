@@ -367,11 +367,16 @@ jobs:
 
       - name: Verify sync reconciled (sphinx in, pytest out)
         run: |
-          uv run python -c "import sphinx"
-          if uv run python -c "import pytest" 2>/dev/null; then
-            echo "::error::pytest should have been removed by uv sync --frozen after second run (extras=docs only)"
+          echo "=== diagnostic: venv state ==="
+          ls -la .venv/lib/python*/site-packages/ 2>/dev/null | grep -iE 'pytest|sphinx' || echo "  (neither pytest nor sphinx in .venv site-packages)"
+          echo "=== sphinx import resolution ==="
+          uv run python -c "import sphinx; print('sphinx from:', sphinx.__file__)"
+          echo "=== pytest import resolution ==="
+          if uv run python -c "import pytest; print('pytest from:', pytest.__file__)" 2>&1; then
+            echo "::error::pytest is still importable after uv sync --frozen --extra docs (should be gone)"
             exit 1
           fi
+          echo "PASS: sync correctly removed pytest"
 
   messy-input-parsing:
     name: tolerate whitespace and mixed separators in install-groups
