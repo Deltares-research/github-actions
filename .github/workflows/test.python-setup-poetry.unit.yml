@@ -371,21 +371,21 @@ jobs:
           verify-lock: 'true'
 
       - name: Verify sync reconciled (sphinx in, pytest out)
-        # Asserts against `poetry show` (poetry's authoritative installed-package
-        # list) rather than `import pytest`. After poetry uninstalls pytest the
-        # empty pytest/ directory can linger in site-packages and Python's PEP 420
-        # namespace-package mechanism makes `import pytest` succeed with
-        # __file__=None — even though pytest is functionally gone.
+        # Uses `poetry run pip list` (reads venv dist-info dirs — the actual
+        # installed packages) rather than `poetry show` (which lists everything
+        # in the lockfile, marking uninstalled-but-locked packages with `(!)`)
+        # or `import pytest` (which can succeed via PEP 420 namespace packages
+        # for empty leftover directories after uninstall).
         run: |
-          echo "=== poetry show (authoritative installed list) ==="
-          poetry show
+          echo "=== poetry run pip list (actually-installed packages in venv) ==="
+          poetry run pip list
           echo
-          if ! poetry show | grep -qE '^sphinx +'; then
+          if ! poetry run pip list | grep -qiE '^sphinx +'; then
             echo "::error::sphinx should be installed after poetry sync --extras docs"
             exit 1
           fi
-          if poetry show | grep -qE '^pytest +'; then
-            echo "::error::pytest should NOT be in poetry's installed list after poetry sync --extras docs"
+          if poetry run pip list | grep -qiE '^pytest +'; then
+            echo "::error::pytest should NOT be installed after poetry sync --extras docs"
             exit 1
           fi
           echo "PASS: sphinx in, pytest out"
