@@ -1,4 +1,4 @@
-name: Test setup-python-pixi
+name: python-setup/pixi - unit
 
 on:
   push:

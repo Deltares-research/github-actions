@@ -1,4 +1,4 @@
-name: Test mkdocs-deploy
+name: mkdocs-deploy - unit
 
 # Every job below uses .github/workflows/test-helpers/setup-fake-remote to
 # repoint `origin` at a local bare repo (/tmp/fake-remote.git) before the

@@ -1,4 +1,4 @@
-name: Test setup-python-poetry
+name: python-setup/poetry - unit
 
 on:
   push:

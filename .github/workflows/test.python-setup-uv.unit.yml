@@ -1,4 +1,4 @@
-name: Test setup-python-uv
+name: python-setup/uv - unit
 
 on:
   push:
