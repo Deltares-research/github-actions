@@ -31,12 +31,12 @@ runs:
   using: 'composite'
   steps:
     - name: Set up Python
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
       with:
         python-version: ${{ inputs.python-version }}
 
     - name: Restore pip download cache
-      uses: actions/cache/restore@v4
+      uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
       id: cache
       with:
         path: ~/.cache/pip
@@ -114,7 +114,7 @@ runs:
 
     - name: Save pip download cache
       if: inputs.cache-write == 'true' && steps.cache.outputs.cache-hit != 'true'
-      uses: actions/cache/save@v4
+      uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
       with:
         path: ~/.cache/pip
         key: pip-${{ runner.os }}-py${{ inputs.python-version }}-pip${{ inputs.pip-version }}-${{ hashFiles('**/requirements*.txt', '**/pyproject.toml', '**/setup.py', '**/setup.cfg') }}
