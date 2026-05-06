@@ -8,7 +8,7 @@ Actions for setting up Python environments with different package managers.
 Setup Python with uv package manager.
 
 ```yaml
-- uses: Deltares-research/github-actions/actions/python-setup/uv@v1
+- uses: Deltares-research/github-actions/actions/python-setup/uv@uv/v1
   with:
     python-version: '3.12'
     install-groups: 'dev docs'

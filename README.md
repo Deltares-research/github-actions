@@ -39,25 +39,37 @@ Automated release workflow for Python packages with version bumping, changelog g
 
 ## Usage
 
-Each action is versioned independently using **namespaced tags** (`<action-name>/v<MAJOR>.<MINOR>.<PATCH>`). Reference the action path plus the namespaced tag:
+Each action is versioned independently using **namespaced tags** (`<namespace>/v<MAJOR>.<MINOR>.<PATCH>`). The namespace is short — see [docs/versioning.md](docs/versioning.md) for the full registry. Reference the action path plus the namespaced tag:
 
 ```yaml
 steps:
   - uses: actions/checkout@v4
 
   - name: Setup Python with uv
-    uses: Deltares-research/github-actions/actions/python-setup/uv@python-setup/uv/v1
+    uses: Deltares-research/github-actions/actions/python-setup/uv@uv/v1
     with:
       python-version: '3.12'
       install-groups: dev
 ```
 
+### Namespace registry
+
+| Action | Namespace |
+|---|---|
+| `actions/python-setup/pip` | `pip` |
+| `actions/python-setup/uv` | `uv` |
+| `actions/python-setup/poetry` | `poetry` |
+| `actions/python-setup/pixi` | `pixi` |
+| `actions/mkdocs-deploy` | `mkdocs` |
+| `actions/release/github` | `github-release` |
+| `actions/release/latex-manual` | `latex` |
+
 ### Reference patterns
 
 | Pattern | Example | When to use |
 |---|---|---|
-| Floating major | `@python-setup/uv/v1` | CI/CD, everyday workflows — auto-picks up patches and minor releases |
-| Pinned specific | `@python-setup/uv/v1.0.0` | Production, compliance, security-critical workflows |
+| Floating major | `@uv/v1` | CI/CD, everyday workflows — auto-picks up patches and minor releases |
+| Pinned specific | `@uv/v1.0.0` | Production, compliance, security-critical workflows |
 | Branch | `@main` | Testing unreleased changes only — **not** for production |
 
 ## Versioning
@@ -66,12 +78,12 @@ This repository uses **namespaced versioning**: every action has its own indepen
 
 For each action, two tags are maintained:
 
-- **Specific version** (immutable) — e.g. `python-setup/uv/v1.0.0`. Never moves.
-- **Floating major** — e.g. `python-setup/uv/v1`. Force-pushed forward as new backward-compatible releases land within the same major.
+- **Specific version** (immutable) — e.g. `uv/v1.0.0`. Never moves.
+- **Floating major** — e.g. `uv/v1`. Force-pushed forward as new backward-compatible releases land within the same major.
 
-A breaking change creates a new major (`python-setup/uv/v2`) and leaves the old major tag where it was, so existing consumers keep working.
+A breaking change creates a new major (`uv/v2`) and leaves the old major tag where it was, so existing consumers keep working.
 
-See [docs/namespaced-versioning.md](docs/namespaced-versioning.md) for the full guide, including the release process, the automated release workflow, and worked examples.
+See [docs/versioning.md](docs/versioning.md) for the full guide, including the release process, the automated release workflow, and worked examples.
 
 ## Contributing
 
@@ -81,14 +93,14 @@ See [docs/namespaced-versioning.md](docs/namespaced-versioning.md) for the full 
 
    ```bash
    # Specific (immutable) version
-   git tag -a python-setup/uv/v1.1.0 -m "Release python-setup/uv v1.1.0"
-   git push origin python-setup/uv/v1.1.0
+   git tag -a uv/v1.1.0 -m "Release uv v1.1.0"
+   git push origin uv/v1.1.0
 
    # Move the floating major tag forward
-   git tag -fa python-setup/uv/v1 -m "Update python-setup/uv v1 to v1.1.0"
-   git push origin python-setup/uv/v1 --force
+   git tag -fa uv/v1 -m "Update uv v1 to v1.1.0"
+   git push origin uv/v1 --force
    ```
 
-4. For a breaking change, create a **new** major tag instead of moving the old one (`python-setup/uv/v2`).
+4. For a breaking change, create a **new** major tag instead of moving the old one (`uv/v2`).
 
-See [docs/namespaced-versioning.md](docs/namespaced-versioning.md) for the complete release procedure.
+See [docs/versioning.md](docs/versioning.md) for the complete release procedure.
