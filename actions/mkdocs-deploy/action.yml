@@ -3,11 +3,14 @@ description: |
   Stand-alone composite action that sets up a Python environment and deploys
   versioned MkDocs documentation to GitHub Pages using mike.
 
-  Python setup is delegated to `actions/python-setup/<package-manager>` —
-  install-groups is forwarded unchanged. Doc-builder deps (mike, mkdocs,
-  plugins) belong in a PEP 735 dependency group, not in PEP 621 extras —
-  extras leak into the published wheel's metadata, which is wrong for
-  CI-only deps. The action only accepts groups for that reason.
+  Python setup is delegated to `actions/python-setup/<package-manager>`:
+    * uv / poetry — `install-groups` is forwarded as PEP 735 dependency groups.
+      Doc-builder deps (mike, mkdocs, plugins) belong in a group, not in PEP 621
+      extras — extras leak into the published wheel's metadata, which is wrong
+      for CI-only deps. That's why only groups are accepted here.
+    * pixi — `install-groups` does not apply (pixi installs from the manifest).
+      Use `pixi-environments` / `pixi-activate-environment` instead, mirroring
+      `actions/release/github`.
 
   Each invocation runs exactly one deploy path, selected by `trigger`. Event
   matching is the caller's responsibility — gate the calling job on the right
@@ -23,7 +26,7 @@ description: |
 
 inputs:
   python-version:
-    description: 'Python version to install. Example: "3.12", "3.13", "3.12.5".'
+    description: 'Python version to install (uv/poetry only; pixi pins Python in its manifest). Example: "3.12", "3.13", "3.12.5".'
     required: false
     default: '3.12'
   package-manager:
@@ -31,9 +34,17 @@ inputs:
     required: false
     default: 'uv'
   install-groups:
-    description: 'PEP 735 dependency groups to install (uv --group / poetry --with). Space- or comma-separated. Example: "docs", "dev docs", "dev,docs".'
+    description: 'PEP 735 dependency groups to install (uv --group / poetry --with; pixi installs from manifest). Space- or comma-separated. Example: "docs", "dev docs", "dev,docs".'
     required: false
     default: 'docs'
+  pixi-environments:
+    description: 'Pixi environments to install (pixi only; passed through to setup-pixi). Space-separated. Empty means the default environment. Example: "docs", "py312 docs".'
+    required: false
+    default: ''
+  pixi-activate-environment:
+    description: 'Pixi environment to activate on PATH after install, so `pixi run` / `mike` resolve into it (pixi only). Must also be listed in pixi-environments. Example: "docs".'
+    required: false
+    default: ''
   trigger:
     description: 'Which deploy path to run on this invocation. The caller workflow must gate on the matching GitHub event via job-level `if:` — the composite does not double-check `github.event_name`. Choose one of {pr, main, release}. Example: "main".'
     required: true
@@ -64,16 +75,18 @@ runs:
       shell: bash
       run: |
         echo "::group::MkDocs Deployment Configuration"
-        echo "Python version:    ${{ inputs.python-version }}"
-        echo "Package manager:   ${{ inputs.package-manager }}"
-        echo "Install groups:    ${{ inputs.install-groups }}"
-        echo "Trigger:           ${{ inputs.trigger }}"
-        echo "Release tag:       ${{ inputs.release-tag }}"
-        echo "Release alias:     ${{ inputs.release-alias }}"
-        echo "Main set-default:  ${{ inputs.main-set-default }}"
-        echo "Release prerelease:${{ inputs.release-prerelease }}"
-        echo "Event name:        ${{ github.event_name }}"
-        echo "Ref:               ${{ github.ref }}"
+        echo "Python version:       ${{ inputs.python-version }}"
+        echo "Package manager:      ${{ inputs.package-manager }}"
+        echo "Install groups:       ${{ inputs.install-groups }}"
+        echo "Pixi environments:    ${{ inputs.pixi-environments }}"
+        echo "Pixi activate env:    ${{ inputs.pixi-activate-environment }}"
+        echo "Trigger:              ${{ inputs.trigger }}"
+        echo "Release tag:          ${{ inputs.release-tag }}"
+        echo "Release alias:        ${{ inputs.release-alias }}"
+        echo "Main set-default:     ${{ inputs.main-set-default }}"
+        echo "Release prerelease:   ${{ inputs.release-prerelease }}"
+        echo "Event name:           ${{ github.event_name }}"
+        echo "Ref:                  ${{ github.ref }}"
         echo "::endgroup::"
 
     # Python environment setup — delegated to actions/python-setup/<pm>
@@ -95,7 +108,8 @@ runs:
       if: inputs.package-manager == 'pixi'
       uses: Deltares-research/github-actions/actions/python-setup/pixi@main
       with:
-        python-version: ${{ inputs.python-version }}
+        environments: ${{ inputs.pixi-environments }}
+        activate-environment: ${{ inputs.pixi-activate-environment }}
 
     # Configure git so mike can push to gh-pages
     - name: Configure git
@@ -112,13 +126,16 @@ runs:
       shell: bash
       env:
         ACTIONS_DEPLOY_TOKEN: ${{ inputs.deploy-token }}
+        PIXI_ENV: ${{ inputs.pixi-activate-environment }}
       run: |
         echo "::group::Deploying PR documentation to 'develop' version"
         echo "Package manager: ${{ inputs.package-manager }}"
         case "${{ inputs.package-manager }}" in
           "uv")     runner="uv run" ;;
           "poetry") runner="poetry run" ;;
-          "pixi")   runner="pixi run" ;;
+          "pixi")
+            if [ -n "$PIXI_ENV" ]; then runner="pixi run -e $PIXI_ENV"; else runner="pixi run"; fi
+            ;;
           *)        runner="" ;;
         esac
 
@@ -131,6 +148,7 @@ runs:
       env:
         ACTIONS_DEPLOY_TOKEN: ${{ inputs.deploy-token }}
         SET_DEFAULT: ${{ inputs.main-set-default }}
+        PIXI_ENV: ${{ inputs.pixi-activate-environment }}
       run: |
         echo "::group::Deploying main branch documentation"
         echo "Package manager: ${{ inputs.package-manager }}"
@@ -138,7 +156,9 @@ runs:
         case "${{ inputs.package-manager }}" in
           "uv")     runner="uv run" ;;
           "poetry") runner="poetry run" ;;
-          "pixi")   runner="pixi run" ;;
+          "pixi")
+            if [ -n "$PIXI_ENV" ]; then runner="pixi run -e $PIXI_ENV"; else runner="pixi run"; fi
+            ;;
           *)        runner="" ;;
         esac
 
@@ -161,6 +181,7 @@ runs:
         RELEASE_TAG_VERSION: ${{ inputs.release-tag }}
         RELEASE_ALIAS: ${{ inputs.release-alias }}
         IS_PRERELEASE: ${{ inputs.release-prerelease }}
+        PIXI_ENV: ${{ inputs.pixi-activate-environment }}
       run: |
         echo "::group::Deploying release documentation"
         echo "Release tag: ${RELEASE_TAG_VERSION}"
@@ -170,7 +191,9 @@ runs:
         case "${{ inputs.package-manager }}" in
           "uv")     runner="uv run" ;;
           "poetry") runner="poetry run" ;;
-          "pixi")   runner="pixi run" ;;
+          "pixi")
+            if [ -n "$PIXI_ENV" ]; then runner="pixi run -e $PIXI_ENV"; else runner="pixi run"; fi
+            ;;
           *)        runner="" ;;
         esac
 

@@ -19,9 +19,11 @@ Each invocation runs **exactly one** deploy path, selected by `trigger`. The act
 
 | Name              | Required | Default  | Description |
 |-------------------|----------|----------|-------------|
-| `python-version`  | no       | `3.12`   | Python version (e.g. `3.12`, `3.13`, `3.12.5`). |
+| `python-version`  | no       | `3.12`   | Python version (uv/poetry only; pixi pins Python in `pixi.toml`). E.g. `3.12`, `3.13`, `3.12.5`. |
 | `package-manager` | no       | `uv`     | One of `uv`, `poetry`, `pixi`. |
-| `install-groups`  | no       | `docs`   | PEP 735 dependency groups to install (uv `--group` / poetry `--with`). Space- or comma-separated. |
+| `install-groups`  | no       | `docs`   | PEP 735 dependency groups to install (uv `--group` / poetry `--with`; pixi installs from manifest). Space- or comma-separated. |
+| `pixi-environments`        | no | `''` | **pixi only** — environments to install (space-separated). Empty = default environment. Mirrors `actions/release/github`. |
+| `pixi-activate-environment`| no | `''` | **pixi only** — environment to put on PATH after install, so `pixi run` / `mike` resolve into it. Must also appear in `pixi-environments`. |
 | `trigger`         | **yes**  | —        | Which deploy path to run. One of `pr`, `main`, `release`. |
 | `deploy-token`    | **yes**  | —        | Token used by `mike` to push to `gh-pages` (needs `contents: write`). |
 | `release-tag`     | no       | `''`     | Tag deployed by `mike` when `trigger=release`; usually `${{ github.event.release.tag_name }}`. |
@@ -47,9 +49,9 @@ steps:
 ```
 
 Your project must declare `mike` and `mkdocs` (and any plugins) in:
-- **uv**: `[dependency-groups] docs = ["mike", "mkdocs"]`
-- **poetry**: `[tool.poetry.group.docs.dependencies] mike = "*"; mkdocs = "*"`
-- **pixi**: `[pypi-dependencies] mike = "*"; mkdocs = "*"` (pixi installs PEP 621 + pypi deps from a single `pixi.toml`)
+- **uv**: `[dependency-groups] docs = ["mike", "mkdocs"]` — pass `install-groups: 'docs'`
+- **poetry**: `[tool.poetry.group.docs.dependencies] mike = "*"; mkdocs = "*"` — pass `install-groups: 'docs'`
+- **pixi**: `[pypi-dependencies] mike = "*"; mkdocs = "*"` in the default environment, OR a dedicated feature/environment (`[feature.docs.pypi-dependencies] ...` + `[environments] docs = ["docs"]`) — in the latter case pass `pixi-environments: 'docs'` and `pixi-activate-environment: 'docs'`
 
 ## Examples
 
@@ -122,10 +124,24 @@ jobs:
 
 ### 3. Pixi project
 
+Default environment (mike/mkdocs in `[pypi-dependencies]`):
+
 ```yaml
 - uses: Deltares-research/github-actions/actions/mkdocs-deploy@mkdocs/v1
   with:
     package-manager: 'pixi'
+    trigger: 'main'
+    deploy-token: ${{ secrets.GITHUB_TOKEN }}
+```
+
+Dedicated `docs` environment (mike/mkdocs in `[feature.docs.pypi-dependencies]`, `[environments] docs = ["docs"]`):
+
+```yaml
+- uses: Deltares-research/github-actions/actions/mkdocs-deploy@mkdocs/v1
+  with:
+    package-manager: 'pixi'
+    pixi-environments: 'docs'
+    pixi-activate-environment: 'docs'   # mike resolves into the docs env
     trigger: 'main'
     deploy-token: ${{ secrets.GITHUB_TOKEN }}
 ```

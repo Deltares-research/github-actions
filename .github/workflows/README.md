@@ -39,10 +39,11 @@ Examples:
 - **[test.mkdocs-deploy.unit.yml](test.mkdocs-deploy.unit.yml)**: Tests for the mkdocs-deploy action
   - Setup wiring across uv, poetry, and pixi (with `mike` + `mkdocs` installed)
   - `install-groups` propagates through to `python-setup/{uv,poetry}` (extras are intentionally not supported — doc deps belong in groups)
+  - `pixi-environments` / `pixi-activate-environment` forwarded to `python-setup/pixi` (mirrors `actions/release/github`)
   - `python-version` pin honored (3.13)
   - `git config` set to `github.actor` after action runs
   - **End-to-end PR deploy** for each PM: mike actually runs and pushes `develop/` to a fake `gh-pages` (PR-event jobs only)
-  - Deploy-step gating: workflow_dispatch fires no deploy step
+  - Unknown `trigger` value fires no deploy step
   - `action.yml` structural sanity (yq)
 
   Every job uses **[test-helpers/setup-fake-remote](test-helpers/setup-fake-remote/action.yml)** to repoint `origin` at `/tmp/fake-remote.git` before the action runs, so `mike deploy --push` never reaches github.com.

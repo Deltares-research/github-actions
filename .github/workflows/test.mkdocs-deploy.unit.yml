@@ -144,6 +144,36 @@ jobs:
       - name: Verify mike + mkdocs installed in pixi env
         run: pixi run python -c "import mike, mkdocs"
 
+  setup-pixi-environments:
+    name: setup pixi (pixi-environments + pixi-activate-environment forwarded)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Stage fixture (pixi multi-env - py311 + py312)
+        run: |
+          cp tests/data/pixi/multi-env/pixi.toml ./pixi.toml
+          cp tests/data/pixi/multi-env/pixi.lock ./pixi.lock
+
+      - name: Set up fake git remote
+        uses: ./.github/workflows/test-helpers/setup-fake-remote
+
+      - name: Run action with pixi env inputs
+        uses: ./actions/mkdocs-deploy
+        with:
+          package-manager: 'pixi'
+          pixi-environments: 'py311 py312'
+          pixi-activate-environment: 'py311'
+          trigger: ''
+          deploy-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify activated env is Python 3.11 and both envs installed
+        run: |
+          python -c "import sys; assert sys.version_info[:2] == (3, 11), sys.version"
+          pixi run -e py312 python -c "import sys; assert sys.version_info[:2] == (3, 12), sys.version"
+
   python-version-pin:
     name: python-version pin honored (3.13)
     runs-on: ubuntu-latest
@@ -356,7 +386,7 @@ jobs:
               exit 1
             fi
           done
-          for input in python-version package-manager install-groups trigger deploy-token release-tag release-alias main-set-default release-prerelease; do
+          for input in python-version package-manager install-groups pixi-environments pixi-activate-environment trigger deploy-token release-tag release-alias main-set-default release-prerelease; do
             if [ "$(yq eval ".inputs.\"$input\"" "$ACTION")" = "null" ]; then
               echo "::error::action.yml is missing input '$input'"
               exit 1
