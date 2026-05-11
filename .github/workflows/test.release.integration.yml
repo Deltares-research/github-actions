@@ -176,7 +176,10 @@ jobs:
           package-manager: 'pixi'
           pixi-environments: 'default'
           pixi-activate-environment: 'default'
-          build-wheel: 'false'
+          # build-wheel: true exercises the toolchain preflight's 'build' check
+          # (python-build is in tests/data/pixi/release/pixi.toml) and the
+          # 'pixi run python -m build' wheel step.
+          build-wheel: 'true'
           skip-github-release: 'true'
 
       - name: Verify release
@@ -192,7 +195,12 @@ jobs:
             echo "::error::pyproject.toml version was not bumped"
             exit 1
           fi
-          echo "[OK] pixi release produced tag $LATEST_TAG / version $NEW_VERSION"
+          if ! ls dist/*.whl >/dev/null 2>&1; then
+            echo "::error::no wheel produced in dist/ (pixi build-wheel path)"
+            ls -la dist/ 2>/dev/null || echo "(no dist/ directory)"
+            exit 1
+          fi
+          echo "[OK] pixi release produced tag $LATEST_TAG / version $NEW_VERSION / wheel $(ls dist/*.whl)"
 
   test-release-prerelease:
     name: Test release - ${{ matrix.prerelease-type }} prerelease

@@ -8,6 +8,7 @@ python = "3.12.*"
 
 [feature.dev.dependencies]
 commitizen = ">=3.0.0"
+python-build = ">=1.0"   # conda-forge name for PyPA 'build'; used by 'pixi run python -m build'
 
 [environments]
 default = ["dev"]

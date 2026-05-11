@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# Minimal package-manager (uv / poetry / pixi) stand-in for unit-testing
+# actions/release/github/scripts/validate-toolchain.sh.
+#
+# The test copies this file to <tmp>/uv, <tmp>/poetry and <tmp>/pixi and puts
+# that dir first on PATH, so the script under test invokes this stub instead of
+# the real tools. It only handles the one shape the script uses:
+#     <pm> run [-e <env>] python -c "import <module>"
+# and decides whether that "import" succeeds based on env vars:
+#     FAKE_PM_HAS_COMMITIZEN  (default 1)  -> exit 0/1 for 'import commitizen'
+#     FAKE_PM_HAS_BUILD       (default 1)  -> exit 0/1 for 'import build'
+# If FAKE_PM_ARGS_FILE is set, each call appends "<pm-name> <argv>" to it so the
+# test can assert which env / module was requested.
+set -u
+
+[ -n "${FAKE_PM_ARGS_FILE:-}" ] && printf '%s %s\n' "$(basename "$0")" "$*" >> "$FAKE_PM_ARGS_FILE"
+
+case "$*" in
+  *"import commitizen"*)
+    [ "${FAKE_PM_HAS_COMMITIZEN:-1}" = "1" ] && exit 0
+    echo "ModuleNotFoundError: No module named 'commitizen'" >&2
+    exit 1
+    ;;
+  *"import build"*)
+    [ "${FAKE_PM_HAS_BUILD:-1}" = "1" ] && exit 0
+    echo "ModuleNotFoundError: No module named 'build'" >&2
+    exit 1
+    ;;
+  *)
+    echo "fake-pm: unexpected invocation: $(basename "$0") $*" >&2
+    exit 2
+    ;;
+esac

@@ -111,7 +111,7 @@ Commitizen and the lock-file update run from the directory containing `config-fi
 1. **Permission check** — calls `GET /repos/{repo}/collaborators/{actor}/permission`; the actor must have `admin`.
 2. **Environment setup** — installs Python and dependencies via the chosen package manager (delegates to `actions/python-setup/<pm>`).
 3. **Configure git** — sets `user.name` / `user.email` to the triggering actor.
-4. **Validate changelog** — confirms the `changelog_file` from `[tool.commitizen]` (or `CHANGELOG.md`) exists.
+4. **Validate** — confirms the `changelog_file` from `[tool.commitizen]` (or `CHANGELOG.md`) exists, and that `commitizen` (plus `build` when `build-wheel: true` on `pixi`) is installed in the environment — so a missing tool fails here, before anything is committed/tagged/pushed.
 5. **Compute the next version** — from the current version + `increment` (+ `prerelease-type`), via `cz bump`. Robust to a messy tag history (see below).
 6. **Bump & changelog** — `cz bump` updates the version files, regenerates the changelog, commits, and tags. If the incremental changelog can't be anchored on an existing tag, the action regenerates the whole changelog from git history and retries (see below).
 7. **Update the lock file** — `uv lock` / `poetry lock` / `pixi install`, committed if it changed.
@@ -145,6 +145,7 @@ The two settings that have to be right:
 - `contents: write` permission on the job, and `fetch-depth: 0` on the checkout (full history and tags are needed).
 - `jq` (available on GitHub-hosted runners).
 - `uv` needs `uv.lock`; `poetry` needs `poetry.lock` + `pyproject.toml`; `pixi` needs `pixi.lock` + `pixi.toml`.
+- `pixi` with `build-wheel: true` additionally needs the **`build`** package in the pixi environment — the pixi wheel build runs `pixi run python -m build`. (`uv` / `poetry` use their built-in `uv build` / `poetry build`, so they need nothing extra.) The action checks for it up front and fails with a clear message if it's missing.
 
 ## Tag history & changelog
 

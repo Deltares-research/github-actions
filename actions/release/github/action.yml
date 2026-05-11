@@ -166,6 +166,21 @@ runs:
         echo "Changelog file exists: $CHANGELOG_FILE"
         echo "::endgroup::"
 
+    - name: Validate release toolchain
+      shell: bash
+      env:
+        PM: ${{ inputs.package-manager }}
+        PIXI_ENV: ${{ inputs.pixi-activate-environment }}
+        BUILD_WHEEL: ${{ inputs.build-wheel }}
+        CONFIG_FILE: ${{ inputs.config-file }}
+      run: |
+        echo "::group::Validating release toolchain"
+        if [ -n "$CONFIG_FILE" ]; then
+          cd "$(dirname "$CONFIG_FILE")"
+        fi
+        bash "$GITHUB_ACTION_PATH/scripts/validate-toolchain.sh" "$PM" "$PIXI_ENV" "$BUILD_WHEEL"
+        echo "::endgroup::"
+
     - name: Generate changelog and bump version with commitizen
       id: bump_version
       shell: bash

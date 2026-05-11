@@ -217,16 +217,140 @@ jobs:
           fi
           echo "[OK] script exited $rc when called with too few arguments"
 
+  test-validate-toolchain:
+    name: validate-toolchain.sh - ${{ matrix.case.label }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        case:
+          - { label: "uv: commitizen present",
+              pm: uv }
+          - { label: "uv: commitizen missing -> error",
+              pm: uv, cz: "0", expect_failure: "true", error_contains: "commitizen" }
+          - { label: "poetry: commitizen present",
+              pm: poetry }
+          - { label: "pixi (default env): commitizen present, uses 'pixi run'",
+              pm: pixi, assert_args: "pixi run python -c import commitizen" }
+          - { label: "pixi (env=dev): uses 'pixi run -e dev'",
+              pm: pixi, pixi_env: "dev", assert_args: "pixi run -e dev python -c import commitizen" }
+          - { label: "pixi: commitizen missing -> error",
+              pm: pixi, cz: "0", expect_failure: "true", error_contains: "commitizen" }
+          - { label: "uv + build-wheel=true: build check skipped (not pixi)",
+              pm: uv, build: "0", build_wheel: "true", refute_args: "import build" }
+          - { label: "pixi + build-wheel=true: build present",
+              pm: pixi, build_wheel: "true", assert_args: "import build" }
+          - { label: "pixi + build-wheel=true: build missing -> error",
+              pm: pixi, build: "0", build_wheel: "true", expect_failure: "true", error_contains: "'build'" }
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run validate-toolchain.sh
+        id: run
+        env:
+          PM: ${{ matrix.case.pm }}
+          PIXI_ENV: ${{ matrix.case.pixi_env }}
+          BUILD_WHEEL: ${{ matrix.case.build_wheel || 'false' }}
+          FAKE_PM_HAS_COMMITIZEN: ${{ matrix.case.cz || '1' }}
+          FAKE_PM_HAS_BUILD: ${{ matrix.case.build || '1' }}
+        run: |
+          # Put fake uv/poetry/pixi (driven by FAKE_PM_* env vars) first on PATH.
+          FAKEBIN="$RUNNER_TEMP/fakebin"
+          mkdir -p "$FAKEBIN"
+          for pm in uv poetry pixi; do
+            cp "$GITHUB_WORKSPACE/tests/data/release-github/fake-pm" "$FAKEBIN/$pm"
+            chmod +x "$FAKEBIN/$pm"
+          done
+          export PATH="$FAKEBIN:$PATH"
+          export FAKE_PM_ARGS_FILE="$RUNNER_TEMP/pm-args.txt"
+          : > "$FAKE_PM_ARGS_FILE"
+
+          set +e
+          OUT=$(bash "$GITHUB_WORKSPACE/actions/release/github/scripts/validate-toolchain.sh" "$PM" "$PIXI_ENV" "$BUILD_WHEEL" 2>&1)
+          RC=$?
+          set -e
+          echo "rc=$RC"
+          echo "--- output ---"; echo "$OUT"
+          echo "--- fake-pm calls ---"; cat "$FAKE_PM_ARGS_FILE"
+          {
+            echo "rc=$RC"
+            echo "out<<__OUT__"; echo "$OUT"; echo "__OUT__"
+            echo "args<<__ARGS__"; cat "$FAKE_PM_ARGS_FILE"; echo "__ARGS__"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Assert
+        env:
+          RC: ${{ steps.run.outputs.rc }}
+          OUT: ${{ steps.run.outputs.out }}
+          ARGS: ${{ steps.run.outputs.args }}
+          EXPECT_FAILURE: ${{ matrix.case.expect_failure || 'false' }}
+          ERROR_CONTAINS: ${{ matrix.case.error_contains }}
+          ASSERT_ARGS: ${{ matrix.case.assert_args }}
+          REFUTE_ARGS: ${{ matrix.case.refute_args }}
+        run: |
+          if [ "$EXPECT_FAILURE" = "true" ]; then
+            if [ "$RC" -eq 0 ]; then
+              echo "::error::expected non-zero exit, got 0"
+              exit 1
+            fi
+          else
+            if [ "$RC" -ne 0 ]; then
+              echo "::error::script exited $RC unexpectedly"
+              exit 1
+            fi
+          fi
+          if [ -n "$ERROR_CONTAINS" ] && ! printf '%s\n' "$OUT" | grep -qF -- "$ERROR_CONTAINS"; then
+            echo "::error::expected the error output to contain '$ERROR_CONTAINS'; got: $OUT"
+            exit 1
+          fi
+          if [ -n "$ASSERT_ARGS" ] && ! printf '%s\n' "$ARGS" | grep -qF -- "$ASSERT_ARGS"; then
+            echo "::error::expected the package manager to be called with '$ASSERT_ARGS'; calls were: $ARGS"
+            exit 1
+          fi
+          if [ -n "$REFUTE_ARGS" ] && printf '%s\n' "$ARGS" | grep -qF -- "$REFUTE_ARGS"; then
+            echo "::error::package manager should NOT have been called with '$REFUTE_ARGS'; calls were: $ARGS"
+            exit 1
+          fi
+          echo "[OK] rc=$RC"
+
+  test-validate-toolchain-usage:
+    name: validate-toolchain.sh - missing args fails
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Calling with too few args should exit non-zero
+        run: |
+          set +e
+          bash actions/release/github/scripts/validate-toolchain.sh uv
+          rc=$?
+          set -e
+          if [ "$rc" -eq 0 ]; then
+            echo "::error::Expected non-zero exit when called with too few arguments; got 0"
+            exit 1
+          fi
+          echo "[OK] script exited $rc when called with too few arguments"
+
   summary:
     runs-on: ubuntu-latest
-    needs: [test-is-prerelease, test-is-prerelease-usage, test-next-version, test-next-version-usage]
+    needs:
+      - test-is-prerelease
+      - test-is-prerelease-usage
+      - test-next-version
+      - test-next-version-usage
+      - test-validate-toolchain
+      - test-validate-toolchain-usage
     if: always()
     steps:
       - name: Summary
         run: |
           echo "# Release Action Unit Test Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- is-prerelease matrix:  ${{ needs.test-is-prerelease.result }}" >> $GITHUB_STEP_SUMMARY
-          echo "- is-prerelease usage:   ${{ needs.test-is-prerelease-usage.result }}" >> $GITHUB_STEP_SUMMARY
-          echo "- next-version matrix:   ${{ needs.test-next-version.result }}" >> $GITHUB_STEP_SUMMARY
-          echo "- next-version usage:    ${{ needs.test-next-version-usage.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- is-prerelease matrix:       ${{ needs.test-is-prerelease.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- is-prerelease usage:        ${{ needs.test-is-prerelease-usage.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- next-version matrix:        ${{ needs.test-next-version.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- next-version usage:         ${{ needs.test-next-version-usage.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- validate-toolchain matrix:  ${{ needs.test-validate-toolchain.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- validate-toolchain usage:   ${{ needs.test-validate-toolchain-usage.result }}" >> $GITHUB_STEP_SUMMARY
