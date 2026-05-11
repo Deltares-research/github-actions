@@ -84,7 +84,9 @@ jobs:
           package-manager: ${{ matrix.package-manager }}
           python-version: '3.12'
           install-groups: 'dev'
-          build-wheel: 'false'
+          # build-wheel: true so the build + DIST_FILES (wheel + sdist) path is
+          # exercised for uv and poetry too (pixi is covered by test-release-pixi).
+          build-wheel: 'true'
           skip-github-release: 'true'
 
       - name: Verify release
@@ -117,6 +119,9 @@ jobs:
             echo "::error::CHANGELOG.md missing entry for $NEW_VERSION"
             exit 1
           fi
+
+      - name: Assert wheel + sdist built and attached
+        run: bash .github/workflows/scripts/assert-release-dist.sh
 
   test-release-pixi:
     name: Test release - pixi (${{ matrix.increment }}, env=${{ matrix.env_name || 'default' }})
@@ -202,12 +207,10 @@ jobs:
             echo "::error::pyproject.toml version was not bumped"
             exit 1
           fi
-          if ! ls dist/*.whl >/dev/null 2>&1; then
-            echo "::error::no wheel produced in dist/ (pixi build-wheel path)"
-            ls -la dist/ 2>/dev/null || echo "(no dist/ directory)"
-            exit 1
-          fi
-          echo "[OK] pixi release produced tag $LATEST_TAG / version $NEW_VERSION / wheel $(ls dist/*.whl)"
+          echo "[OK] pixi release produced tag $LATEST_TAG / version $NEW_VERSION"
+
+      - name: Assert wheel + sdist built and attached
+        run: bash .github/workflows/scripts/assert-release-dist.sh
 
   test-release-prerelease:
     name: Test release - ${{ matrix.prerelease-type }} prerelease

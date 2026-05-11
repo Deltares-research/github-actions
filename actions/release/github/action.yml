@@ -62,7 +62,7 @@ inputs:
     description: 'GitHub token for API calls and releases'
     required: true
   build-wheel:
-    description: 'Whether to build and include wheel in release'
+    description: 'Whether to build the distributions (wheel + sdist) and attach them to the release. (The name is kept for backwards compatibility.)'
     required: false
     default: 'true'
   skip-github-release:
@@ -374,36 +374,42 @@ runs:
         echo "Tag pushed: ${{ steps.bump_version.outputs.NEW_VERSION }}"
         echo "::endgroup::"
 
-    - name: Build Wheel (uv/poetry)
+    - name: Build distributions (uv/poetry)
       if: inputs.build-wheel == 'true' && (inputs.package-manager == 'uv' || inputs.package-manager == 'poetry')
       shell: bash
       env:
         PM: ${{ inputs.package-manager }}
         WORK_DIR: ${{ steps.bump_version.outputs.WORK_DIR }}
       run: |
-        echo "::group::Building Wheel with $PM"
+        echo "::group::Building distributions with $PM"
         cd "$WORK_DIR"
+        # `uv build` / `poetry build` build both the wheel and the sdist into dist/.
         "$PM" build
-        echo "WHEEL_PATH=$WORK_DIR/$(ls -t dist/*.whl | head -n 1)" >> $GITHUB_ENV
+        ls -la dist/
+        # Attach everything in dist/ (wheel + sdist) to the release.
+        echo "DIST_FILES=$WORK_DIR/dist/*" >> $GITHUB_ENV
         echo "::endgroup::"
 
-    - name: Build Wheel (pixi)
+    - name: Build distributions (pixi)
       if: inputs.build-wheel == 'true' && inputs.package-manager == 'pixi'
       shell: bash
       env:
         WORK_DIR: ${{ steps.bump_version.outputs.WORK_DIR }}
         PIXI_ENV: ${{ inputs.pixi-activate-environment }}
       run: |
-        echo "::group::Building Wheel with pixi"
+        echo "::group::Building distributions with pixi"
         cd "$WORK_DIR"
-        # Build in the same pixi environment the bump / toolchain-validation
+        # `python -m build` builds both the wheel and the sdist into dist/.
+        # Run it in the same pixi environment the bump / toolchain-validation
         # steps use (pixi-activate-environment, or the default env when empty).
         if [ -n "$PIXI_ENV" ]; then
           pixi run -e "$PIXI_ENV" python -m build
         else
           pixi run python -m build
         fi
-        echo "WHEEL_PATH=$WORK_DIR/$(ls -t dist/*.whl | head -n 1)" >> $GITHUB_ENV
+        ls -la dist/
+        # Attach everything in dist/ (wheel + sdist) to the release.
+        echo "DIST_FILES=$WORK_DIR/dist/*" >> $GITHUB_ENV
         echo "::endgroup::"
 
     - name: Extract release notes from changelog
@@ -445,7 +451,7 @@ runs:
         body: ${{ steps.release_notes.outputs.body }}
         draft: ${{ inputs.draft == 'true' }}
         prerelease: ${{ steps.bump_version.outputs.IS_PRERELEASE == 'true' }}
-        files: ${{ inputs.build-wheel == 'true' && env.WHEEL_PATH || '' }}
+        files: ${{ inputs.build-wheel == 'true' && env.DIST_FILES || '' }}
 
     - name: Release summary
       shell: bash

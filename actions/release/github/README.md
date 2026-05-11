@@ -103,7 +103,7 @@ Commitizen and the lock-file update run from the directory containing `config-fi
 | `pixi-environments` | Pixi environments to install (pixi only; passed to `setup-pixi`). | No | `''` |
 | `pixi-activate-environment` | Pixi environment to put on `PATH` (pixi only; must also be in `pixi-environments`). | No | `''` |
 | `verify-lock` | Verify the lock file is up to date before installing. | No | `true` |
-| `build-wheel` | Build a wheel and attach it to the release. | No | `true` |
+| `build-wheel` | Build the distributions (wheel **and** sdist) and attach them to the release. (Name kept for backwards compatibility.) | No | `true` |
 | `skip-github-release` | **Testing only.** Bump + tag + push but skip the GitHub Releases API call. | No | `false` |
 
 ## What this action does
@@ -116,8 +116,8 @@ Commitizen and the lock-file update run from the directory containing `config-fi
 6. **Bump & changelog** — `cz bump` updates the version files, regenerates the changelog, commits, and tags. If the incremental changelog can't be anchored on an existing tag, the action regenerates the whole changelog from git history and retries (see below).
 7. **Update the lock file** — `uv lock` / `poetry lock` / `pixi install`, committed if it changed.
 8. **Push** — commits and tags pushed to the repository.
-9. **Build wheel** — optional (`build-wheel`).
-10. **GitHub Release** — created via `softprops/action-gh-release` with the changelog section as the body, the wheel attached (if built), and `draft` / prerelease flags applied. Skipped when `skip-github-release: true`.
+9. **Build distributions** — optional (`build-wheel`): `uv build` / `poetry build` / `pixi run python -m build` produce a wheel **and** an sdist in `dist/`.
+10. **GitHub Release** — created via `softprops/action-gh-release` with the changelog section as the body, everything in `dist/` (wheel + sdist) attached (if built), and `draft` / prerelease flags applied. Skipped when `skip-github-release: true`.
 
 ## Requirements
 
@@ -145,7 +145,7 @@ The two settings that have to be right:
 - `contents: write` permission on the job, and `fetch-depth: 0` on the checkout (full history and tags are needed).
 - `jq` (available on GitHub-hosted runners).
 - `uv` needs `uv.lock`; `poetry` needs `poetry.lock` + `pyproject.toml`; `pixi` needs `pixi.lock` + `pixi.toml`.
-- `pixi` with `build-wheel: true` additionally needs the **`build`** package in the pixi environment the action uses — i.e. `pixi-activate-environment`, or the `default` env when that input is unset (the wheel build, the version bump, and the toolchain check all run in that one environment via `pixi run [-e <env>]`). (`uv` / `poetry` use their built-in `uv build` / `poetry build`, so they need nothing extra.) The action checks for `build` up front and fails with a clear message if it's missing.
+- `pixi` with `build-wheel: true` additionally needs the **`build`** package in the pixi environment the action uses — i.e. `pixi-activate-environment`, or the `default` env when that input is unset (the distribution build, the version bump, and the toolchain check all run in that one environment via `pixi run [-e <env>]`). (`uv` / `poetry` use their built-in `uv build` / `poetry build`, so they need nothing extra.) The action checks for `build` up front and fails with a clear message if it's missing.
 
 ## Tag history & changelog
 
