@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# Minimal `cz` (commitizen) stand-in for unit-testing
+# actions/release/github/scripts/next-version.sh.
+#
+# Each test case scripts the exact commitizen behaviour it needs via env vars:
+#   FAKE_CZ_DRYRUN_TAG     / FAKE_CZ_DRYRUN_EXIT     -> `cz bump --dry-run ...`
+#   FAKE_CZ_GETNEXT_VERSION / FAKE_CZ_GETNEXT_EXIT   -> `cz bump --get-next ...`
+#
+# An empty *_TAG / *_VERSION means "print nothing parseable on stdout". The
+# dry-run case mimics real commitizen, which prints the `tag to create:` line
+# to stdout *before* it may fail (exit 16) generating an incremental changelog.
+#
+# If FAKE_CZ_ARGS_FILE is set, every invocation appends its argv to that file
+# (one line per call) so tests can assert flags such as `--prerelease` are
+# forwarded.
+set -u
+
+[ -n "${FAKE_CZ_ARGS_FILE:-}" ] && printf '%s\n' "$*" >> "$FAKE_CZ_ARGS_FILE"
+
+case "$*" in
+  *"bump --dry-run"*)
+    if [ -n "${FAKE_CZ_DRYRUN_TAG:-}" ]; then
+      printf 'bump: version 0.0.0 -> %s\ntag to create: %s\nincrement detected: MINOR\n' \
+        "$FAKE_CZ_DRYRUN_TAG" "$FAKE_CZ_DRYRUN_TAG"
+    fi
+    exit "${FAKE_CZ_DRYRUN_EXIT:-0}"
+    ;;
+  *"bump --get-next"*)
+    [ -n "${FAKE_CZ_GETNEXT_VERSION:-}" ] && printf '%s\n' "$FAKE_CZ_GETNEXT_VERSION"
+    exit "${FAKE_CZ_GETNEXT_EXIT:-0}"
+    ;;
+  *)
+    echo "fake-cz: unexpected invocation: cz $*" >&2
+    exit 2
+    ;;
+esac

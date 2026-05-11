@@ -1,0 +1,7 @@
+# Fixture for test.release.unit.yml: a project whose commitizen tag_format has
+# a "v" prefix, so a bare version from `cz bump --get-next` (e.g. 3.1.0) must be
+# normalised by next-version.sh to the tag form (v3.1.0).
+[tool.commitizen]
+name = "cz_conventional_commits"
+version = "3.0.1"
+tag_format = "v$version"
