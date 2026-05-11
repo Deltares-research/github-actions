@@ -119,12 +119,18 @@ jobs:
           fi
 
   test-release-pixi:
-    name: Test release - pixi (${{ matrix.increment }})
+    name: Test release - pixi (${{ matrix.increment }}, env=${{ matrix.env_name || 'default' }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         increment: [patch, minor]
+        # env_name '' -> no pixi-activate-environment, so the action uses the
+        #   implicit default env via bare `pixi run` / `pixi run python -m build`.
+        # env_name 'release' -> a named non-default env, so the action uses
+        #   `pixi run -e release ...` for the bump, the toolchain check, AND the
+        #   wheel build (it must be consistent across all three).
+        env_name: ['', 'release']
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -174,11 +180,12 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           increment: ${{ matrix.increment }}
           package-manager: 'pixi'
-          pixi-environments: 'default'
-          pixi-activate-environment: 'default'
+          pixi-environments: ${{ matrix.env_name }}
+          pixi-activate-environment: ${{ matrix.env_name }}
           # build-wheel: true exercises the toolchain preflight's 'build' check
-          # (python-build is in tests/data/pixi/release/pixi.toml) and the
-          # 'pixi run python -m build' wheel step.
+          # (python-build is in tests/data/pixi/release/pixi.toml's dev feature,
+          # which both the default and 'release' envs include) and the
+          # 'pixi run [-e <env>] python -m build' wheel step.
           build-wheel: 'true'
           skip-github-release: 'true'
 

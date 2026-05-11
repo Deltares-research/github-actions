@@ -145,7 +145,7 @@ The two settings that have to be right:
 - `contents: write` permission on the job, and `fetch-depth: 0` on the checkout (full history and tags are needed).
 - `jq` (available on GitHub-hosted runners).
 - `uv` needs `uv.lock`; `poetry` needs `poetry.lock` + `pyproject.toml`; `pixi` needs `pixi.lock` + `pixi.toml`.
-- `pixi` with `build-wheel: true` additionally needs the **`build`** package in the pixi environment — the pixi wheel build runs `pixi run python -m build`. (`uv` / `poetry` use their built-in `uv build` / `poetry build`, so they need nothing extra.) The action checks for it up front and fails with a clear message if it's missing.
+- `pixi` with `build-wheel: true` additionally needs the **`build`** package in the pixi environment the action uses — i.e. `pixi-activate-environment`, or the `default` env when that input is unset (the wheel build, the version bump, and the toolchain check all run in that one environment via `pixi run [-e <env>]`). (`uv` / `poetry` use their built-in `uv build` / `poetry build`, so they need nothing extra.) The action checks for `build` up front and fails with a clear message if it's missing.
 
 ## Tag history & changelog
 

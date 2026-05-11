@@ -392,10 +392,17 @@ runs:
       shell: bash
       env:
         WORK_DIR: ${{ steps.bump_version.outputs.WORK_DIR }}
+        PIXI_ENV: ${{ inputs.pixi-activate-environment }}
       run: |
         echo "::group::Building Wheel with pixi"
         cd "$WORK_DIR"
-        pixi run python -m build
+        # Build in the same pixi environment the bump / toolchain-validation
+        # steps use (pixi-activate-environment, or the default env when empty).
+        if [ -n "$PIXI_ENV" ]; then
+          pixi run -e "$PIXI_ENV" python -m build
+        else
+          pixi run python -m build
+        fi
         echo "WHEEL_PATH=$WORK_DIR/$(ls -t dist/*.whl | head -n 1)" >> $GITHUB_ENV
         echo "::endgroup::"
 
