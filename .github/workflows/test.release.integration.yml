@@ -271,15 +271,112 @@ jobs:
             exit 1
           fi
 
+  test-release-messy-tags:
+    name: Test release - messy tag history (recovery)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Stage fixture
+        run: cp -r tests/data/uv/release/. .
+
+      - name: Clean up repository tags
+        run: git tag -l | xargs -r git tag -d
+
+      - name: Setup fake git remote
+        uses: ./.github/workflows/test-helpers/setup-fake-remote
+
+      - name: Seed a messy history
+        run: |
+          git config user.name "Test Bot"
+          git config user.email "test@example.com"
+
+          # Changelog whose newest heading is a version that has NO matching git
+          # tag — exactly the situation that breaks cz bump's incremental
+          # changelog ("No tag found to do an incremental changelog").
+          cat > CHANGELOG.md << 'EOF'
+          # Changelog
+
+          ## 0.0.5 (2020-01-01)
+
+          ### Fix
+
+          - legacy hand-written entry that doesn't correspond to any git tag
+          EOF
+
+          git add pyproject.toml uv.lock CHANGELOG.md test_release_integration
+          git commit -m "chore: initial commit"
+          # A valid tag (matches tag_format = "$version") plus two that don't —
+          # commitizen should warn-and-skip the latter, not choke on them.
+          git tag 0.1.0
+          git tag v0.1.0
+          git tag 0.0.1.post1
+          git push origin "$(git branch --show-current)"
+          git push origin 0.1.0 v0.1.0 0.0.1.post1
+
+          echo "# test" > README.md
+          git add README.md
+          git commit -m "feat: new feature for minor test"
+          git push origin "$(git branch --show-current)"
+
+      - name: Run release action
+        uses: ./actions/release/github
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          increment: minor
+          package-manager: uv
+          python-version: '3.12'
+          install-groups: 'dev'
+          build-wheel: 'false'
+          skip-github-release: 'true'
+
+      - name: Verify recovery
+        run: |
+          echo "::group::Tags after release"
+          git tag -l
+          echo "::endgroup::"
+          echo "::group::Changelog after release"
+          cat CHANGELOG.md
+          echo "::endgroup::"
+
+          LATEST_TAG=$(git describe --tags --abbrev=0)
+          echo "Latest tag: $LATEST_TAG"
+          if [ "$LATEST_TAG" != "0.2.0" ]; then
+            echo "::error::expected new tag 0.2.0 (minor bump from 0.1.0), got '$LATEST_TAG'"
+            exit 1
+          fi
+
+          NEW_VERSION=$(grep -m1 'version = ' pyproject.toml | cut -d'"' -f2)
+          if [ "$NEW_VERSION" != "0.2.0" ]; then
+            echo "::error::expected pyproject.toml version 0.2.0, got '$NEW_VERSION'"
+            exit 1
+          fi
+
+          if ! grep -q '0.2.0' CHANGELOG.md; then
+            echo "::error::CHANGELOG.md missing entry for 0.2.0"
+            exit 1
+          fi
+          # The stale 0.0.5 stub must have been replaced by the recovery's full
+          # regen — its presence would mean the recovery path was never taken.
+          if grep -q '0.0.5' CHANGELOG.md; then
+            echo "::error::CHANGELOG.md still contains the stale 0.0.5 heading; the recovery regen did not run"
+            exit 1
+          fi
+          echo "[OK] recovery produced tag $LATEST_TAG, version $NEW_VERSION, regenerated changelog"
+
   summary:
     runs-on: ubuntu-latest
-    needs: [test-release-uv-poetry, test-release-pixi, test-release-prerelease]
+    needs: [test-release-uv-poetry, test-release-pixi, test-release-prerelease, test-release-messy-tags]
     if: always()
     steps:
       - name: Summary
         run: |
           echo "# Release Action Integration Test Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- uv/poetry matrix: ${{ needs.test-release-uv-poetry.result }}" >> $GITHUB_STEP_SUMMARY
-          echo "- pixi: ${{ needs.test-release-pixi.result }}" >> $GITHUB_STEP_SUMMARY
-          echo "- prerelease: ${{ needs.test-release-prerelease.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- uv/poetry matrix:   ${{ needs.test-release-uv-poetry.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- pixi:               ${{ needs.test-release-pixi.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- prerelease:         ${{ needs.test-release-prerelease.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- messy tag recovery: ${{ needs.test-release-messy-tags.result }}" >> $GITHUB_STEP_SUMMARY

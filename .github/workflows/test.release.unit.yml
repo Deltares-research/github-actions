@@ -6,10 +6,12 @@ on:
     paths:
       - 'actions/release/github/**'
       - '.github/workflows/test.release.unit.yml'
+      - 'tests/data/release-github/**'
   workflow_dispatch:
 
-# Pure unit tests — no fixtures, no remote, no commitizen. Fast feedback for
-# the small bash helpers under actions/release/github/scripts/.
+# Unit tests for the small bash helpers under actions/release/github/scripts/.
+# No remote and no real commitizen — `cz` is stubbed by tests/data/release-github/fake-cz
+# where needed.
 
 permissions:
   contents: read
@@ -105,14 +107,126 @@ jobs:
           fi
           echo "[OK] script exited $rc when called without an argument"
 
+  test-next-version:
+    name: next-version.sh - ${{ matrix.case.label }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        case:
+          - { label: "dry-run returns a tag",
+              dryrun_tag: "1.1.0",
+              expected: "1.1.0" }
+          - { label: "dry-run prints a tag then exits non-zero (messy tag history)",
+              dryrun_tag: "3.1.0", dryrun_exit: "16",
+              expected: "3.1.0" }
+          - { label: "dry-run unusable, get-next provides the version",
+              dryrun_exit: "16", getnext_version: "3.1.0",
+              expected: "3.1.0" }
+          - { label: "get-next bare version normalised via tag_format",
+              dryrun_exit: "16", getnext_version: "3.1.0",
+              tag_format_dir: "tests/data/release-github/tag-format",
+              expected: "v3.1.0" }
+          - { label: "both strategies fail -> error",
+              dryrun_exit: "16", getnext_exit: "16",
+              expect_failure: "true" }
+          - { label: "prerelease type forwarded to commitizen",
+              prerelease: "beta", dryrun_tag: "1.1.0b1",
+              expected: "1.1.0b1", assert_args: "--prerelease beta" }
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run next-version.sh
+        id: run
+        env:
+          FAKE_CZ_DRYRUN_TAG: ${{ matrix.case.dryrun_tag }}
+          FAKE_CZ_DRYRUN_EXIT: ${{ matrix.case.dryrun_exit || '0' }}
+          FAKE_CZ_GETNEXT_VERSION: ${{ matrix.case.getnext_version }}
+          FAKE_CZ_GETNEXT_EXIT: ${{ matrix.case.getnext_exit || '0' }}
+          INCREMENT: ${{ matrix.case.increment || 'minor' }}
+          PRERELEASE: ${{ matrix.case.prerelease || 'none' }}
+          TAG_FORMAT_DIR: ${{ matrix.case.tag_format_dir }}
+        run: |
+          SCRIPT="$GITHUB_WORKSPACE/actions/release/github/scripts/next-version.sh"
+          CZ="$GITHUB_WORKSPACE/tests/data/release-github/fake-cz"
+          export FAKE_CZ_ARGS_FILE="$RUNNER_TEMP/cz-args.txt"
+          : > "$FAKE_CZ_ARGS_FILE"
+          if [ -n "$TAG_FORMAT_DIR" ]; then cd "$GITHUB_WORKSPACE/$TAG_FORMAT_DIR"; fi
+          set +e
+          OUT=$(bash "$SCRIPT" "$INCREMENT" "$PRERELEASE" bash "$CZ")
+          RC=$?
+          set -e
+          echo "Output: '$OUT' (rc=$RC)"
+          echo "Args seen by fake-cz:"; cat "$FAKE_CZ_ARGS_FILE"
+          {
+            echo "rc=$RC"
+            echo "out=$OUT"
+            echo "args<<__ARGS__"
+            cat "$FAKE_CZ_ARGS_FILE"
+            echo "__ARGS__"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Assert
+        env:
+          RC: ${{ steps.run.outputs.rc }}
+          OUT: ${{ steps.run.outputs.out }}
+          ARGS: ${{ steps.run.outputs.args }}
+          EXPECTED: ${{ matrix.case.expected }}
+          EXPECT_FAILURE: ${{ matrix.case.expect_failure || 'false' }}
+          ASSERT_ARGS: ${{ matrix.case.assert_args }}
+        run: |
+          if [ "$EXPECT_FAILURE" = "true" ]; then
+            if [ "$RC" -eq 0 ]; then
+              echo "::error::expected non-zero exit, got 0 (out='$OUT')"
+              exit 1
+            fi
+            echo "[OK] script failed as expected (rc=$RC)"
+            exit 0
+          fi
+          if [ "$RC" -ne 0 ]; then
+            echo "::error::script exited $RC unexpectedly"
+            exit 1
+          fi
+          if [ "$OUT" != "$EXPECTED" ]; then
+            echo "::error::expected '$EXPECTED' but got '$OUT'"
+            exit 1
+          fi
+          if [ -n "$ASSERT_ARGS" ] && ! printf '%s\n' "$ARGS" | grep -qF -- "$ASSERT_ARGS"; then
+            echo "::error::expected fake-cz to be called with '$ASSERT_ARGS'; calls were: $ARGS"
+            exit 1
+          fi
+          echo "[OK] -> '$OUT'"
+
+  test-next-version-usage:
+    name: next-version.sh - missing args fails
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Calling with too few args should exit non-zero
+        run: |
+          set +e
+          bash actions/release/github/scripts/next-version.sh minor
+          rc=$?
+          set -e
+          if [ "$rc" -eq 0 ]; then
+            echo "::error::Expected non-zero exit when called with too few arguments; got 0"
+            exit 1
+          fi
+          echo "[OK] script exited $rc when called with too few arguments"
+
   summary:
     runs-on: ubuntu-latest
-    needs: [test-is-prerelease, test-is-prerelease-usage]
+    needs: [test-is-prerelease, test-is-prerelease-usage, test-next-version, test-next-version-usage]
     if: always()
     steps:
       - name: Summary
         run: |
           echo "# Release Action Unit Test Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- is-prerelease matrix: ${{ needs.test-is-prerelease.result }}" >> $GITHUB_STEP_SUMMARY
-          echo "- is-prerelease usage:  ${{ needs.test-is-prerelease-usage.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- is-prerelease matrix:  ${{ needs.test-is-prerelease.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- is-prerelease usage:   ${{ needs.test-is-prerelease-usage.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- next-version matrix:   ${{ needs.test-next-version.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- next-version usage:    ${{ needs.test-next-version-usage.result }}" >> $GITHUB_STEP_SUMMARY

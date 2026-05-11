@@ -213,61 +213,76 @@ runs:
         echo "Current version: $CURRENT_VERSION"
         echo "::endgroup::"
 
-        echo "::group::Calculating next version (dry-run)"
+        echo "::group::Calculating next version"
         echo "Increment type: $INCREMENT"
         if [ "$PRERELEASE_TYPE" != "none" ]; then
           echo "Prerelease type: $PRERELEASE_TYPE"
-          NEXT_VERSION=$("${CZ_CMD[@]}" bump --dry-run --yes --increment "$INCREMENT" --prerelease "$PRERELEASE_TYPE" | grep "tag to create" | awk '{print $NF}')
-        else
-          NEXT_VERSION=$("${CZ_CMD[@]}" bump --dry-run --yes --increment "$INCREMENT" | grep "tag to create" | awk '{print $NF}')
         fi
-        if [ -z "$NEXT_VERSION" ]; then
-          echo "::error::commitizen dry-run did not return a next version."
-          exit 1
-        fi
+        # next-version.sh is resilient to a messy tag history (tags that don't
+        # match tag_format, or a changelog whose latest version has no tag);
+        # see the script header and test.release.unit.yml. It exits non-zero
+        # with a ::error:: message if no next version can be determined.
+        NEXT_VERSION=$(bash "$GITHUB_ACTION_PATH/scripts/next-version.sh" "$INCREMENT" "$PRERELEASE_TYPE" "${CZ_CMD[@]}")
         echo "Next version: $NEXT_VERSION"
         echo "Version change: $CURRENT_VERSION -> $NEXT_VERSION"
         echo "::endgroup::"
 
         echo "::group::Bumping version and generating changelog"
-        # cz bump handles changelog generation when update_changelog_on_bump = true.
-        # If it fails, we recover by regenerating the full changelog and retrying with --files-only.
+        # `cz bump` updates the version files, regenerates the changelog (when
+        # update_changelog_on_bump = true), commits, and tags. Its changelog
+        # step is always incremental and must anchor on a previous git tag whose
+        # version matches the newest heading in the changelog file. On a repo
+        # with a messy/legacy tag history (hand-created tags, tags that don't
+        # match tag_format, or a changelog that's out of sync with the tags)
+        # that anchor can't be found and cz bump exits with "No tag found to do
+        # an incremental changelog". Recover by regenerating the whole changelog
+        # from git history (which needs no anchor) and retrying the bump.
+        BUMP_LOG="$(mktemp)"
         set +e
         if [ "$PRERELEASE_TYPE" != "none" ]; then
-          "${CZ_CMD[@]}" bump --yes --increment "$INCREMENT" --prerelease "$PRERELEASE_TYPE"
-          BUMP_EXIT_CODE=$?
+          "${CZ_CMD[@]}" bump --yes --increment "$INCREMENT" --prerelease "$PRERELEASE_TYPE" 2>&1 | tee "$BUMP_LOG"
+          BUMP_EXIT_CODE=${PIPESTATUS[0]}
         else
-          "${CZ_CMD[@]}" bump --yes --increment "$INCREMENT"
-          BUMP_EXIT_CODE=$?
+          "${CZ_CMD[@]}" bump --yes --increment "$INCREMENT" 2>&1 | tee "$BUMP_LOG"
+          BUMP_EXIT_CODE=${PIPESTATUS[0]}
         fi
         set -e
 
-        if [ $BUMP_EXIT_CODE -ne 0 ]; then
-          echo "cz bump failed (exit code: $BUMP_EXIT_CODE). Recovering..."
+        if [ "$BUMP_EXIT_CODE" -ne 0 ]; then
+          if ! { grep -q "No tag found to do an incremental changelog" "$BUMP_LOG" \
+                 && grep -qE '^update_changelog_on_bump\s*=\s*true' pyproject.toml; }; then
+            echo "::error::cz bump failed (exit code: $BUMP_EXIT_CODE). See the log above."
+            exit "$BUMP_EXIT_CODE"
+          fi
+
+          echo "::warning::cz bump could not anchor the incremental changelog on an existing tag (messy/legacy tag history)."
+          echo "::warning::Regenerating $CHANGELOG_FILE from git history and retrying the bump. If the changelog contained hand-written content, review it after the release."
 
           git checkout -- "$CHANGELOG_FILE"
-          "${CZ_CMD[@]}" changelog --unreleased-version="$NEXT_VERSION"
 
-          # cz bump --files-only still triggers an incremental changelog update when
-          # update_changelog_on_bump = true, which now fails because the unreleased
-          # section already exists from the full regen above. Toggle the setting off
-          # for the retry, then restore it.
-          TOGGLED_CL=false
-          if grep -qE '^update_changelog_on_bump\s*=\s*true' pyproject.toml; then
-            sed -i -E 's/^update_changelog_on_bump\s*=\s*true/update_changelog_on_bump = false/' pyproject.toml
-            TOGGLED_CL=true
+          # Regenerate the whole changelog without the incremental anchor.
+          TOGGLED_INCR=false
+          if grep -qE '^changelog_incremental\s*=\s*true' pyproject.toml; then
+            sed -i -E 's/^changelog_incremental\s*=\s*true/changelog_incremental = false/' pyproject.toml
+            TOGGLED_INCR=true
+          fi
+          "${CZ_CMD[@]}" changelog
+          if [ "$TOGGLED_INCR" = "true" ]; then
+            sed -i -E 's/^changelog_incremental\s*=\s*false/changelog_incremental = true/' pyproject.toml
           fi
 
+          # Retry: the regenerated changelog's newest version heading now
+          # corresponds to a real tag, so cz bump's incremental changelog can
+          # anchor on it, commit, and tag (cz bump picks up the regenerated,
+          # still-uncommitted changelog from the working tree).
           if [ "$PRERELEASE_TYPE" != "none" ]; then
-            "${CZ_CMD[@]}" bump --yes --increment "$INCREMENT" --prerelease "$PRERELEASE_TYPE" --files-only
+            "${CZ_CMD[@]}" bump --yes --increment "$INCREMENT" --prerelease "$PRERELEASE_TYPE" \
+              || { echo "::error::cz bump still failed after regenerating the changelog; the tag history likely needs manual cleanup."; exit 1; }
           else
-            "${CZ_CMD[@]}" bump --yes --increment "$INCREMENT" --files-only
+            "${CZ_CMD[@]}" bump --yes --increment "$INCREMENT" \
+              || { echo "::error::cz bump still failed after regenerating the changelog; the tag history likely needs manual cleanup."; exit 1; }
           fi
-
-          if [ "$TOGGLED_CL" = "true" ]; then
-            sed -i -E 's/^update_changelog_on_bump\s*=\s*false/update_changelog_on_bump = true/' pyproject.toml
-          fi
-          echo "Recovery successful"
+          echo "Recovery successful: changelog regenerated and version bumped."
         fi
         echo "::endgroup::"
 
