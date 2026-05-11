@@ -12,3 +12,7 @@ python-build = ">=1.0"   # conda-forge name for PyPA 'build'; used by 'pixi run 
 
 [environments]
 default = ["dev"]
+# A named (non-default) environment with the same contents, so the integration
+# test can exercise the action's `pixi run -e <env>` path (bump / toolchain
+# check / wheel build) as well as the implicit-default `pixi run` path.
+release = ["dev"]
