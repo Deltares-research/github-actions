@@ -85,7 +85,7 @@ runs:
         cd "$LATEX_DIR"
 
         echo "::group::Downloading from SVN Repository"
-        if ! svn checkout --username "$SVN_USERNAME" --password "$SVN_PASSWORD" --non-interactive --trust-server-cert "$SVN_REPO_URL" temp_svn; then
+        if ! svn checkout --username "$SVN_USERNAME" --password "$SVN_PASSWORD" --non-interactive "$SVN_REPO_URL" temp_svn; then
           echo "::warning::Failed to checkout SVN repository. Continuing without Deltares styles."
           echo "::endgroup::"
           exit 0
@@ -111,11 +111,14 @@ runs:
 
     - name: Generate LaTeX from Markdown
       shell: bash
+      env:
+        MARKDOWN_INPUT_DIR: ${{ inputs.markdown-input-dir }}
+        LATEX_OUTPUT_DIR: ${{ inputs.latex-output-dir }}
       run: |
         echo "::group::Converting Markdown to LaTeX"
         ddocs markdown-to-latex \
-          --input ${{ inputs.markdown-input-dir }} \
-          --output ${{ inputs.latex-output-dir }}
+          --input "$MARKDOWN_INPUT_DIR" \
+          --output "$LATEX_OUTPUT_DIR"
         echo "::endgroup::"
 
     - name: Install LaTeX
@@ -138,10 +141,13 @@ runs:
     - name: Compile PDF Documents
       if: inputs.tex-files != ''
       shell: bash
+      env:
+        LATEX_OUTPUT_DIR: ${{ inputs.latex-output-dir }}
+        TEX_FILES_INPUT: ${{ inputs.tex-files }}
       run: |
         echo "::group::Preparing LaTeX Compilation"
-        cd "${{ inputs.latex-output-dir }}"
-        IFS=',' read -ra TEX_FILES <<< "${{ inputs.tex-files }}"
+        cd "$LATEX_OUTPUT_DIR"
+        IFS=',' read -ra TEX_FILES <<< "$TEX_FILES_INPUT"
         echo "Files to compile: ${TEX_FILES[*]}"
         echo "::endgroup::"
 
@@ -182,15 +188,17 @@ runs:
 
     - name: List Generated Files
       shell: bash
+      env:
+        LATEX_OUTPUT_DIR: ${{ inputs.latex-output-dir }}
       run: |
         echo "Generated LaTeX files:"
-        find ${{ inputs.latex-output-dir }} -name "*.tex" -type f
+        find "$LATEX_OUTPUT_DIR" -name "*.tex" -type f
         echo "Generated PDF files:"
-        find ${{ inputs.latex-output-dir }} -name "*.pdf" -type f
+        find "$LATEX_OUTPUT_DIR" -name "*.pdf" -type f
 
     - name: Upload PDF Artifacts
       if: inputs.tex-files != ''
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
       with:
         name: LaTeX-Documentation
         path: ${{ inputs.latex-output-dir }}/*.pdf
@@ -199,12 +207,14 @@ runs:
       if: inputs.tex-files != '' && inputs.upload-to-release == 'true' && inputs.github-token != '' && github.event_name == 'release'
       id: get_tag
       shell: bash
+      env:
+        RELEASE_TAG_NAME: ${{ github.event.release.tag_name }}
       run: |
-        echo "tag=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
+        echo "tag=$RELEASE_TAG_NAME" >> "$GITHUB_OUTPUT"
 
     - name: Upload PDFs to Release
       if: inputs.tex-files != '' && inputs.upload-to-release == 'true' && inputs.github-token != '' && steps.get_tag.outputs.tag != ''
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
       with:
         tag_name: ${{ steps.get_tag.outputs.tag }}
         files: ${{ inputs.latex-output-dir }}/*.pdf
