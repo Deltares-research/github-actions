@@ -2,27 +2,27 @@ name: release/latex-manual - unit
 
 # Tests for actions/release/latex-manual.
 #
-# Strategy
-# --------
-# The action is self-contained — it installs its own Python and ddocs (which
-# pulls in pandoc via pypandoc), and TeX Live when compiling PDFs. It does not
-# interact with the consumer's pyproject or virtualenv, so tests don't need the
-# per-PM fixture matrix used elsewhere in this repo.
+# Test tiers
+# ----------
+#   1. Static  (action-yaml-*)   — yq assertions on the action contract. No
+#      action run; fast; always on push/PR.
+#   2. Behavioral (lightweight)  — run the action with tex-files='' so neither
+#      TeX Live nor pdflatex install. Each job isolates one input/behavior:
+#      default python, pinned python, custom dirs, multi-file conversion,
+#      graceful style-fetch failure (empty and bogus token). ~1 min each.
+#   3. End-to-end (heavy)        — tex-files set, so TeX Live installs (~5 min)
+#      and pdflatex runs. Gated to workflow_dispatch. Covers the compile loop,
+#      bibtex branch, whitespace trimming, and artifact upload/download.
 #
-# Two external dependencies are handled as follows:
-#   * Deltares styles: the action runs `ddocs get-tex-template` to fetch
-#     LaTeX styles from the internal Deltares/LatexInstallation repo. Tests
-#     pass no latex-template-token, so the fetch fails and the action's graceful
-#     path emits a `::warning::` and continues. Every job thus implicitly
-#     verifies that the fetch failure does not abort the pipeline.
-#   * texlive + pdflatex: the action gates these on `tex-files != ''`. The
-#     unit jobs leave `tex-files` empty (the default), skipping both the
-#     ~5-minute apt install and pdflatex. The `pdf-compile-end-to-end` job
-#     exercises the heavy path on `workflow_dispatch` only.
-#
-# The `ddocs` CLI (https://github.com/Deltares-research/doc_utils) is
-# installed from git by the action — tests just let that happen and assert
-# the markdown-to-latex step produced output.
+# External dependencies
+#   * Deltares styles: the action runs `ddocs get-tex-template` against the
+#     internal Deltares/LatexInstallation repo. Tests pass no (or a bogus)
+#     latex-template-token, so the fetch fails and the action's graceful path
+#     emits a `::warning::` and continues. Every behavioral job thus implicitly
+#     proves the fetch failure does not abort the pipeline.
+#   * ddocs + pandoc: the action pip-installs ddocs from git, which pulls in
+#     pandoc via pypandoc (downloaded on first markdown-to-latex use). Tests
+#     let that happen and assert on the produced .tex.
 
 on:
   push:
@@ -31,11 +31,12 @@ on:
 
 env:
   MD_INPUT: tests/data/release-latex-manual/markdown
+  MD_MULTI: tests/data/release-latex-manual/markdown-multi
 
 jobs:
-  # ---------------------------------------------------------------------
-  # Structural sanity: action.yml has the inputs and steps we depend on.
-  # ---------------------------------------------------------------------
+  # =====================================================================
+  # TIER 1 — STATIC: action.yml contract (no action execution)
+  # =====================================================================
   action-yaml-structure:
     name: action.yml structural sanity
     runs-on: ubuntu-latest
@@ -45,7 +46,7 @@ jobs:
       - name: Install yq
         run: sudo snap install yq || sudo apt-get install -y yq
 
-      - name: Verify action.yml shape
+      - name: Verify top-level shape + inputs exist
         run: |
           ACTION=actions/release/latex-manual/action.yml
           for key in name description inputs runs; do
@@ -63,10 +64,19 @@ jobs:
               exit 1
             fi
           done
-          # Inputs explicitly removed in refactors — guard against accidental
-          # reintroduction. No PM coupling; ddocs is hardcoded to the upstream
-          # git URL; artifact upload always fires when there are PDFs; and the
-          # SVN inputs were replaced by ddocs get-tex-template (latex-template-token).
+          USING=$(yq eval ".runs.using" "$ACTION")
+          if [ "$USING" != "composite" ]; then
+            echo "::error::action.runs.using must be 'composite', got: $USING"
+            exit 1
+          fi
+          echo "shape + inputs OK"
+
+      - name: Verify removed inputs stay removed
+        run: |
+          ACTION=actions/release/latex-manual/action.yml
+          # Guard against accidental reintroduction. No PM coupling; ddocs is
+          # hardcoded to the upstream git URL; artifact upload always fires
+          # when there are PDFs; SVN inputs were replaced by get-tex-template.
           for unwanted in package-manager dependency-groups install-extras \
                           poetry-extras pixi-environments \
                           pixi-activate-environment verify-lock ddocs-source \
@@ -77,39 +87,42 @@ jobs:
               exit 1
             fi
           done
-          # latex-template-token must NOT be required — empty means "fetch
-          # styles anonymously and continue gracefully if that fails".
-          REQ=$(yq eval '.inputs."latex-template-token".required' "$ACTION")
-          if [ "$REQ" = "true" ]; then
-            echo "::error::latex-template-token must not be required (empty = graceful style-fetch failure)"
-            exit 1
-          fi
-          # tex-files must NOT be required — empty means "skip pdflatex".
-          REQ=$(yq eval '.inputs."tex-files".required' "$ACTION")
-          if [ "$REQ" = "true" ]; then
-            echo "::error::tex-files must not be required (empty = skip pdflatex)"
-            exit 1
-          fi
-          USING=$(yq eval ".runs.using" "$ACTION")
-          if [ "$USING" != "composite" ]; then
-            echo "::error::action.runs.using must be 'composite', got: $USING"
-            exit 1
-          fi
+          echo "removed-input guard OK"
+
+      - name: Verify input requiredness + defaults
+        run: |
+          ACTION=actions/release/latex-manual/action.yml
+          # latex-template-token and tex-files must be optional (their empty
+          # defaults drive the graceful-failure / skip-pdflatex behaviors).
+          for opt in latex-template-token tex-files; do
+            if [ "$(yq eval ".inputs.\"$opt\".required" "$ACTION")" = "true" ]; then
+              echo "::error::input '$opt' must not be required"
+              exit 1
+            fi
+          done
+          # Default dirs the consumers rely on must not silently change.
+          test "$(yq eval '.inputs."markdown-input-dir".default' "$ACTION")" = "docs/mkdocs/user_docs" \
+            || { echo "::error::markdown-input-dir default drifted"; exit 1; }
+          test "$(yq eval '.inputs."latex-output-dir".default' "$ACTION")" = "docs/end-user-docs/source" \
+            || { echo "::error::latex-output-dir default drifted"; exit 1; }
+          test "$(yq eval '.inputs."python-version".default' "$ACTION")" = "3.12" \
+            || { echo "::error::python-version default drifted"; exit 1; }
+          echo "requiredness + defaults OK"
+
+      - name: Verify steps exist + pdflatex gating
+        run: |
+          ACTION=actions/release/latex-manual/action.yml
           STEPS=$(yq eval ".runs.steps[].name" "$ACTION")
-          for expected in "Set up Python" "Install ddocs" \
+          for expected in "Define constants" "Set up Python" "Install ddocs" \
                           "Fetch Deltares LaTeX Styles" "Generate LaTeX from Markdown" \
                           "Install LaTeX" "Compile PDF Documents" \
-                          "Upload PDF Artifacts" "Upload PDFs to Release"; do
+                          "Upload PDF Artifacts" "Get Release Tag" "Upload PDFs to Release"; do
             if ! echo "$STEPS" | grep -Fxq "$expected"; then
               echo "::error::action.yml is missing step: $expected"
               exit 1
             fi
           done
-          echo "action.yml structure OK"
-
-      - name: Verify pdflatex-related steps are gated on tex-files
-        run: |
-          ACTION=actions/release/latex-manual/action.yml
+          # texlive/pdflatex/upload steps must be gated on tex-files != ''.
           for step in "Install LaTeX" "Compile PDF Documents" "Upload PDF Artifacts" "Get Release Tag" "Upload PDFs to Release"; do
             COND=$(yq eval ".runs.steps[] | select(.name == \"$step\") | .if" "$ACTION")
             if ! echo "$COND" | grep -q "tex-files != ''"; then
@@ -117,15 +130,44 @@ jobs:
               exit 1
             fi
           done
-          echo "pdflatex gating OK"
+          # Release steps must additionally gate on the release event + token.
+          for step in "Get Release Tag" "Upload PDFs to Release"; do
+            COND=$(yq eval ".runs.steps[] | select(.name == \"$step\") | .if" "$ACTION")
+            echo "$COND" | grep -q "github.event_name == 'release'" || { echo "::error::$step not gated on release event"; exit 1; }
+            echo "$COND" | grep -q "github-token != ''" || { echo "::error::$step not gated on github-token"; exit 1; }
+          done
+          echo "steps + gating OK"
 
-  # ---------------------------------------------------------------------
-  # Happy path: install + ddocs + graceful style-fetch failure (no token)
-  # + markdown-to-latex. Asserts the converted .tex appears, and that
-  # pdflatex/texlive did NOT run (tex-files is empty by default).
-  # ---------------------------------------------------------------------
+      - name: Verify artifact step + ddocs constant + SHA-pinned actions
+        run: |
+          ACTION=actions/release/latex-manual/action.yml
+          # Artifact name is the stable contract consumers download by.
+          NAME=$(yq eval '.runs.steps[] | select(.name == "Upload PDF Artifacts") | .with.name' "$ACTION")
+          test "$NAME" = "LaTeX-Documentation" || { echo "::error::artifact name changed: $NAME"; exit 1; }
+          # DDOCS_REPO constant is the single source of truth for the ddocs pin.
+          grep -q 'DDOCS_REPO=git+https://github.com/Deltares-research/doc_utils.git@' "$ACTION" \
+            || { echo "::error::DDOCS_REPO constant missing or repo URL changed"; exit 1; }
+          test "$(grep -c 'doc_utils.git' "$ACTION")" = "1" \
+            || { echo "::error::ddocs repo URL must appear exactly once (single source of truth)"; exit 1; }
+          # Third-party actions must be SHA-pinned (40-hex) per repo convention.
+          THIRD_PARTY=$(yq eval '.runs.steps[].uses' "$ACTION" | grep -v '^null$' | grep -v '^Deltares-research/' || true)
+          while IFS= read -r ref; do
+            [ -z "$ref" ] && continue
+            sha="${ref##*@}"
+            if ! echo "$sha" | grep -Eq '^[0-9a-f]{40}$'; then
+              echo "::error::third-party action not SHA-pinned: $ref"
+              exit 1
+            fi
+          done <<< "$THIRD_PARTY"
+          echo "artifact + constant + pinning OK"
+
+  # =====================================================================
+  # TIER 2 — BEHAVIORAL: run the action, tex-files='' (no TeX Live/pdflatex)
+  # =====================================================================
+
+  # Happy path + graceful no-token style fetch + default dirs.
   convert-markdown-to-latex:
-    name: convert markdown → latex (no pdflatex)
+    name: behavioral — convert markdown to latex (default dirs, no token)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -136,24 +178,22 @@ jobs:
           cp $MD_INPUT/index.md docs/mkdocs/user_docs/index.md
 
       - name: Run action
-        # No latex-template-token → the style fetch fails and the action continues
-        # via its graceful warning path. This exercises that path on every run.
+        # No latex-template-token → style fetch fails and the action continues
+        # via its graceful warning path. Exercised on every run.
         uses: ./actions/release/latex-manual
 
       - name: Verify ddocs is on PATH after install
         run: ddocs --version
 
-      - name: Verify ddocs converted markdown → latex
+      - name: Verify ddocs converted markdown to latex
         run: |
-          # ddocs writes one .tex per .md (default pattern '*.md').
-          # Our fixture has a single index.md, so index.tex must appear.
           test -f docs/end-user-docs/source/index.tex || {
             echo "::error::ddocs markdown-to-latex did not produce index.tex"
             ls -la docs/end-user-docs/source
             exit 1
           }
 
-      - name: Verify pdflatex was NOT run (tex-files empty)
+      - name: Verify pdflatex/TeX Live did NOT run (tex-files empty)
         run: |
           if compgen -G "docs/end-user-docs/source/*.aux" > /dev/null; then
             echo "::error::found .aux files — pdflatex ran when it shouldn't have"; exit 1
@@ -162,44 +202,116 @@ jobs:
             echo "::error::pdflatex installed — texlive install ran when it shouldn't have"; exit 1
           fi
 
-  # ---------------------------------------------------------------------
-  # python-version is honored. The action passes it to actions/setup-python;
-  # asserting the resulting interpreter version proves the wiring works.
-  # ---------------------------------------------------------------------
-  python-version-pin:
-    name: python-version pin honored (3.13)
+  # Default python-version (no input) resolves to 3.12.
+  default-python-version:
+    name: behavioral — default python-version is 3.12
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Stage fixture
         run: |
           mkdir -p docs/mkdocs/user_docs docs/end-user-docs/source
           cp $MD_INPUT/index.md docs/mkdocs/user_docs/index.md
+      - name: Run action (no python-version)
+        uses: ./actions/release/latex-manual
+      - name: Verify Python 3.12 active
+        run: python -c "import sys; assert sys.version_info[:2] == (3, 12), sys.version"
 
+  # python-version pin is honored.
+  python-version-pin:
+    name: behavioral — python-version pin honored (3.13)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Stage fixture
+        run: |
+          mkdir -p docs/mkdocs/user_docs docs/end-user-docs/source
+          cp $MD_INPUT/index.md docs/mkdocs/user_docs/index.md
       - name: Run action with python-version=3.13
         uses: ./actions/release/latex-manual
         with:
           python-version: '3.13'
-
       - name: Verify Python 3.13 active
         run: python -c "import sys; assert sys.version_info[:2] == (3, 13), sys.version"
 
-  # ---------------------------------------------------------------------
-  # End-to-end pdflatex run. Heavy (~5 min for texlive install) so manual
-  # only. Validates that with real tex-files values the texlive install,
-  # 3 pdflatex passes, bibtex citation handling, and the comma-separated
-  # multi-file loop all wire up correctly.
-  #
-  # Two .tex fixtures cover two paths through the action's compile loop:
-  #   * sample.tex   — has \cite{} + bibliography → exercises the bibtex
-  #                    branch that greps the .aux file for \citation.
-  #   * sample2.tex  — plain document with no citations → exercises the
-  #                    comma-separated multi-file path without conflating
-  #                    it with the bibtex branch.
-  # ---------------------------------------------------------------------
+  # markdown-input-dir + latex-output-dir are honored (non-default paths).
+  custom-input-output-dirs:
+    name: behavioral — custom markdown-input-dir + latex-output-dir
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Stage fixture in non-default input dir
+        run: |
+          mkdir -p custom/src
+          cp $MD_INPUT/index.md custom/src/index.md
+      - name: Run action with custom dirs
+        uses: ./actions/release/latex-manual
+        with:
+          markdown-input-dir: custom/src
+          latex-output-dir: custom/out
+      - name: Verify .tex landed in the custom output dir
+        run: |
+          test -f custom/out/index.tex || {
+            echo "::error::index.tex not found in custom/out"
+            ls -la custom/out || true
+            exit 1
+          }
+          # And nothing was written to the default location.
+          if [ -f docs/end-user-docs/source/index.tex ]; then
+            echo "::error::output written to default dir despite custom latex-output-dir"
+            exit 1
+          fi
+
+  # Multiple .md inputs → one .tex each (conversion loop / glob).
+  multiple-markdown-files:
+    name: behavioral — multiple markdown files convert independently
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Stage two markdown files
+        run: |
+          mkdir -p docs/mkdocs/user_docs docs/end-user-docs/source
+          cp $MD_MULTI/alpha.md docs/mkdocs/user_docs/alpha.md
+          cp $MD_MULTI/beta.md  docs/mkdocs/user_docs/beta.md
+      - name: Run action
+        uses: ./actions/release/latex-manual
+      - name: Verify both .tex files were produced
+        run: |
+          for f in alpha beta; do
+            test -f docs/end-user-docs/source/$f.tex || {
+              echo "::error::$f.tex not produced"; ls -la docs/end-user-docs/source; exit 1;
+            }
+          done
+
+  # A bogus token still drives the action down the token→auth→fail→graceful
+  # path (distinct from the empty-token anonymous path) without aborting.
+  bogus-template-token-graceful:
+    name: behavioral — bogus latex-template-token fails gracefully
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Stage fixture
+        run: |
+          mkdir -p docs/mkdocs/user_docs docs/end-user-docs/source
+          cp $MD_INPUT/index.md docs/mkdocs/user_docs/index.md
+      - name: Run action with an invalid token
+        uses: ./actions/release/latex-manual
+        with:
+          latex-template-token: 'ghp_thisIsNotARealTokenJustForTesting000000'
+      - name: Verify conversion still happened despite bad token
+        run: test -f docs/end-user-docs/source/index.tex
+
+  # =====================================================================
+  # TIER 3 — END-TO-END: tex-files set → TeX Live + pdflatex (heavy)
+  # workflow_dispatch only.
+  # =====================================================================
+
+  # Compile loop + bibtex branch (both directions) + whitespace trimming.
+  #   * sample.tex  — has \cite{} + bibliography → bibtex branch fires.
+  #   * sample2.tex — no citations → bibtex must be skipped.
+  # tex-files uses a space after the comma to exercise the `xargs` trim.
   pdf-compile-end-to-end:
-    name: end-to-end pdflatex compile (workflow_dispatch only)
+    name: e2e — pdflatex compile (workflow_dispatch only)
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
@@ -215,10 +327,10 @@ jobs:
           cp tests/data/release-latex-manual/end-to-end/sample2.tex docs/end-user-docs/source/sample2.tex
           cp tests/data/release-latex-manual/end-to-end/refs.bib    docs/end-user-docs/source/refs.bib
 
-      - name: Run action with comma-separated tex-files
+      - name: Run action with comma+space separated tex-files
         uses: ./actions/release/latex-manual
         with:
-          tex-files: 'sample,sample2'
+          tex-files: 'sample, sample2'   # space exercises the xargs trim
 
       - name: Verify both PDFs were produced
         run: |
@@ -233,18 +345,40 @@ jobs:
           test -f docs/end-user-docs/source/sample.aux
           test -f docs/end-user-docs/source/sample2.aux
 
-      - name: Verify bibtex branch fired for sample.tex
+      - name: Verify bibtex branch fired only for the cited document
         run: |
-          # The action greps .aux for \citation and runs bibtex when found.
-          # bibtex produces a .bbl file alongside the .aux. Its presence
-          # proves the bibtex branch executed (vs being silently skipped).
+          # bibtex produces a .bbl next to the .aux. Present for the cited doc,
+          # absent for the uncited one — proves both branches of the grep.
           test -f docs/end-user-docs/source/sample.bbl || {
             echo "::error::sample.bbl missing — bibtex did not run on sample.tex"
             ls -la docs/end-user-docs/source
             exit 1
           }
-          # And sample2 (no citations) must NOT have a .bbl.
           if [ -f docs/end-user-docs/source/sample2.bbl ]; then
             echo "::error::sample2.bbl exists — bibtex ran on a doc with no \\cite"
             exit 1
           fi
+
+  # The artifact uploaded by the action above is downloadable and contains the
+  # PDFs. Runs after the compile job and pulls the named artifact back.
+  pdf-artifact-uploaded:
+    name: e2e — PDF artifact is uploaded (workflow_dispatch only)
+    if: github.event_name == 'workflow_dispatch'
+    needs: pdf-compile-end-to-end
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download the action's artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: LaTeX-Documentation
+          path: downloaded
+
+      - name: Verify the PDFs are in the artifact
+        run: |
+          for f in sample sample2; do
+            test -f downloaded/$f.pdf || {
+              echo "::error::$f.pdf missing from the LaTeX-Documentation artifact"
+              ls -la downloaded || true
+              exit 1
+            }
+          done
