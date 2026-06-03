@@ -23,7 +23,11 @@ inputs:
     required: false
     default: ''
   markdown-input-dir:
-    description: 'Input directory containing Markdown files.'
+    description: |
+      Input directory containing Markdown files to convert to LaTeX.
+      Set to '' to skip the markdown-to-latex step entirely — use this when the
+      LaTeX sources are authored directly (no Markdown) and you only want the
+      style fetch + pdflatex compile.
     required: false
     default: 'docs/mkdocs/user_docs'
   latex-output-dir:
@@ -106,7 +110,10 @@ runs:
         fi
         echo "::endgroup::"
 
+    # Skipped when markdown-input-dir is empty — for projects whose LaTeX is
+    # authored directly (no Markdown source), leaving only style-fetch + compile.
     - name: Generate LaTeX from Markdown
+      if: inputs.markdown-input-dir != ''
       shell: bash
       env:
         MARKDOWN_INPUT_DIR: ${{ inputs.markdown-input-dir }}

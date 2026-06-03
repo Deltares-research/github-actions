@@ -168,6 +168,10 @@ jobs:
               exit 1
             fi
           done
+          # The markdown-to-latex step must be skippable via an empty input.
+          CONV_COND=$(yq eval '.runs.steps[] | select(.name == "Generate LaTeX from Markdown") | .if' "$ACTION")
+          echo "$CONV_COND" | grep -q "markdown-input-dir != ''" \
+            || { echo "::error::Generate LaTeX from Markdown not gated on markdown-input-dir != ''"; exit 1; }
           # Release steps must additionally gate on the github token.
           for step in "Get Release Tag" "Upload PDFs to Release"; do
             COND=$(yq eval ".runs.steps[] | select(.name == \"$step\") | .if" "$ACTION")
@@ -346,6 +350,30 @@ jobs:
           latex-template-token: 'ghp_thisIsNotARealTokenJustForTesting000000'
       - name: Verify conversion still happened despite bad token
         run: test -f docs/end-user-docs/source/index.tex
+
+  # markdown-input-dir='' skips the conversion entirely (for pure-LaTeX repos
+  # that author .tex directly). No markdown is staged, and the default input
+  # dir (docs/mkdocs/user_docs) does not exist — without the skip, ddocs would
+  # error on the missing dir; with it, the action proceeds and produces no .tex.
+  skip-conversion-when-markdown-empty:
+    name: behavioral — empty markdown-input-dir skips conversion
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run action with empty markdown-input-dir
+        uses: ./actions/release/latex-manual
+        with:
+          markdown-input-dir: ''
+      - name: Verify no .tex was produced by conversion
+        run: |
+          # The style fetch (no token) creates docs/end-user-docs/source but
+          # leaves it empty; conversion is skipped, so no .tex should exist.
+          if compgen -G "docs/end-user-docs/source/*.tex" > /dev/null; then
+            echo "::error::conversion ran despite empty markdown-input-dir"
+            ls -la docs/end-user-docs/source
+            exit 1
+          fi
+          echo "conversion correctly skipped"
 
   # =====================================================================
   # TIER 3 — END-TO-END: tex-files set → TeX Live + pdflatex (heavy)
