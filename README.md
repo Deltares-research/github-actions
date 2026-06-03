@@ -54,23 +54,46 @@ steps:
 
 ### Namespace registry
 
-| Action | Namespace |
-|---|---|
-| `actions/python-setup/pip` | `pip` |
-| `actions/python-setup/uv` | `uv` |
-| `actions/python-setup/poetry` | `poetry` |
-| `actions/python-setup/pixi` | `pixi` |
-| `actions/mkdocs-deploy` | `mkdocs` |
-| `actions/release/github` | `github-release` |
-| `actions/release/latex-manual` | `latex` |
+| Action                         | Namespace        |
+|--------------------------------|------------------|
+| `actions/python-setup/pip`     | `pip`            |
+| `actions/python-setup/uv`      | `uv`             |
+| `actions/python-setup/poetry`  | `poetry`         |
+| `actions/python-setup/pixi`    | `pixi`           |
+| `actions/mkdocs-deploy`        | `mkdocs`         |
+| `actions/release/github`       | `github-release` |
+| `actions/release/latex-manual` | `latex`          |
+
+### Latest releases
+
+The latest released version of each action and the commit it points to. The floating major tag is
+force-pushed forward to the same commit on each backward-compatible release.
+
+| Action                         | Latest version          | Floating major      | Commit    | Released   |
+|--------------------------------|-------------------------|---------------------|-----------|------------|
+| `actions/python-setup/pip`     | `pip/v1.0.1`            | `pip/v1`            | `d60c876` | 2026-05-06 |
+| `actions/python-setup/uv`      | `uv/v1.0.1`             | `uv/v1`             | `d60c876` | 2026-05-06 |
+| `actions/python-setup/poetry`  | `poetry/v1.0.1`         | `poetry/v1`         | `d60c876` | 2026-05-06 |
+| `actions/python-setup/pixi`    | `pixi/v1.0.1`           | `pixi/v1`           | `d60c876` | 2026-05-06 |
+| `actions/mkdocs-deploy`        | `mkdocs-deploy/v1.0.1`¹ | `mkdocs-deploy/v1`¹ | `b655376` | 2026-05-11 |
+| `actions/release/github`       | `github-release/v1.1.4` | `github-release/v1` | `73618de` | 2026-06-03 |
+| `actions/release/latex-manual` | _unreleased_²           | —                   | —         | —          |
+
+¹ Published tags use the `mkdocs-deploy/*` prefix, not the `mkdocs` namespace listed in the registry above.
+  Pin against `mkdocs-deploy/*` until the namespaces are reconciled.
+² No release tags cut yet — consume via `@main` until the first `latex/*` tag is published.
+
+> Legacy duplicate tags from early tagging also exist (`python-setup/<pm>/*`, `release/github/*`). Prefer the
+> short namespaces in the table above. To regenerate this table, resolve each namespace's newest
+> `vX.Y.Z` tag with `git rev-list -n 1 <tag>`.
 
 ### Reference patterns
 
-| Pattern | Example | When to use |
-|---|---|---|
-| Floating major | `@uv/v1` | CI/CD, everyday workflows — auto-picks up patches and minor releases |
-| Pinned specific | `@uv/v1.0.0` | Production, compliance, security-critical workflows |
-| Branch | `@main` | Testing unreleased changes only — **not** for production |
+| Pattern         | Example      | When to use                                                          |
+|-----------------|--------------|----------------------------------------------------------------------|
+| Floating major  | `@uv/v1`     | CI/CD, everyday workflows — auto-picks up patches and minor releases |
+| Pinned specific | `@uv/v1.0.0` | Production, compliance, security-critical workflows                  |
+| Branch          | `@main`      | Testing unreleased changes only — **not** for production             |
 
 ## Versioning
 
