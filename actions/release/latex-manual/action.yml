@@ -5,10 +5,10 @@ description: |
   fetched by ddocs (get-tex-template) from the internal Deltares/LatexInstallation
   repo.
 
-  Self-contained: installs its own Python and ddocs (which pulls in pandoc via
-  pypandoc), and TeX Live when compiling PDFs. Does NOT touch the consumer's
-  pyproject, lock file, or virtualenv — the action is a documentation pipeline
-  that runs in isolation from the project's own dependency management.
+  Self-contained: installs its own pandoc, Python, ddocs, and TeX Live (when
+  compiling PDFs). Does NOT touch the consumer's pyproject, lock file, or
+  virtualenv — the action is a documentation pipeline that runs in isolation
+  from the project's own dependency management.
 
 inputs:
   python-version:
@@ -62,14 +62,26 @@ runs:
       run: |
         echo "DDOCS_REPO=git+https://github.com/Deltares-research/doc_utils.git@latex-templates" >> "$GITHUB_ENV"
 
+    # Install pandoc from apt so it is already on PATH. ddocs/pypandoc would
+    # otherwise try to download a pandoc binary at runtime, which resolves the
+    # "latest" release via the unauthenticated GitHub API and gets HTTP 403
+    # rate-limited on shared CI runners. With pandoc present, ddocs's
+    # check_pandoc_installed() passes its `pandoc --version` check and never
+    # hits the API.
+    - name: Install pandoc
+      shell: bash
+      run: |
+        echo "::group::Installing pandoc"
+        sudo apt-get update
+        sudo apt-get install -y pandoc
+        pandoc --version
+        echo "::endgroup::"
+
     - name: Set up Python
       uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
       with:
         python-version: ${{ inputs.python-version }}
 
-    # ddocs brings pandoc with it (via its pypandoc dependency): the
-    # markdown-to-latex step downloads a pandoc binary automatically if one
-    # isn't already on PATH, so there is no separate pandoc install step.
     - name: Install ddocs
       shell: bash
       run: |
