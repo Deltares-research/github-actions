@@ -130,12 +130,20 @@ jobs:
               exit 1
             fi
           done
-          # Release steps must additionally gate on the release event + token.
+          # Release steps must additionally gate on the github token.
           for step in "Get Release Tag" "Upload PDFs to Release"; do
             COND=$(yq eval ".runs.steps[] | select(.name == \"$step\") | .if" "$ACTION")
-            echo "$COND" | grep -q "github.event_name == 'release'" || { echo "::error::$step not gated on release event"; exit 1; }
             echo "$COND" | grep -q "github-token != ''" || { echo "::error::$step not gated on github-token"; exit 1; }
           done
+          # The release event gate lives on "Get Release Tag"; the upload step
+          # inherits it transitively via steps.get_tag.outputs.tag (only set
+          # when Get Release Tag runs, i.e. on a release event).
+          TAG_COND=$(yq eval '.runs.steps[] | select(.name == "Get Release Tag") | .if' "$ACTION")
+          echo "$TAG_COND" | grep -q "github.event_name == 'release'" \
+            || { echo "::error::Get Release Tag not gated on release event"; exit 1; }
+          UPLOAD_COND=$(yq eval '.runs.steps[] | select(.name == "Upload PDFs to Release") | .if' "$ACTION")
+          echo "$UPLOAD_COND" | grep -q "steps.get_tag.outputs.tag != ''" \
+            || { echo "::error::Upload PDFs to Release not gated on the release tag output"; exit 1; }
           echo "steps + gating OK"
 
       - name: Verify artifact step + ddocs constant + SHA-pinned actions
