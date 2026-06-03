@@ -54,23 +54,55 @@ steps:
 
 ### Namespace registry
 
-| Action | Namespace |
-|---|---|
-| `actions/python-setup/pip` | `pip` |
-| `actions/python-setup/uv` | `uv` |
-| `actions/python-setup/poetry` | `poetry` |
-| `actions/python-setup/pixi` | `pixi` |
-| `actions/mkdocs-deploy` | `mkdocs` |
-| `actions/release/github` | `github-release` |
-| `actions/release/latex-manual` | `latex` |
+| Action                         | Namespace        |
+|--------------------------------|------------------|
+| `actions/python-setup/pip`     | `pip`            |
+| `actions/python-setup/uv`      | `uv`             |
+| `actions/python-setup/poetry`  | `poetry`         |
+| `actions/python-setup/pixi`    | `pixi`           |
+| `actions/mkdocs-deploy`        | `mkdocs`         |
+| `actions/release/github`       | `github-release` |
+| `actions/release/latex-manual` | `latex`          |
+
+### Latest releases
+
+The latest released version of each action and the **full commit SHA** it resolves to. Pin against the
+commit SHA (not the tag) when consuming these actions — action-pinning security scanners
+(e.g. StepSecurity Harden-Runner, OpenSSF Scorecard) flag floating tags and require an immutable
+40-character SHA. The floating major tag is force-pushed to the same commit on each backward-compatible
+release.
+
+| Action                         | Latest version          | Commit SHA (pin this)                      |
+|--------------------------------|-------------------------|--------------------------------------------|
+| `actions/python-setup/pip`     | `pip/v1.0.1`            | `d60c8767cd8efb9c42850eabac6845cbe015d772` |
+| `actions/python-setup/uv`      | `uv/v1.0.1`             | `d60c8767cd8efb9c42850eabac6845cbe015d772` |
+| `actions/python-setup/poetry`  | `poetry/v1.0.1`         | `d60c8767cd8efb9c42850eabac6845cbe015d772` |
+| `actions/python-setup/pixi`    | `pixi/v1.0.1`           | `d60c8767cd8efb9c42850eabac6845cbe015d772` |
+| `actions/mkdocs-deploy`        | `mkdocs-deploy/v1.0.1`¹ | `b655376b4a9c0b0b37f7f730f840f11c7220d1a6` |
+| `actions/release/github`       | `github-release/v1.1.4` | `73618deb1feaffe481d69063ce7bf229fab6598b` |
+| `actions/release/latex-manual` | _unreleased_²           | —                                          |
+
+Pin in a consumer workflow by appending the SHA and keeping the version in a trailing comment:
+
+```yaml
+- uses: Deltares-research/github-actions/actions/release/github@73618deb1feaffe481d69063ce7bf229fab6598b # github-release/v1.1.4
+```
+
+¹ Published tags use the `mkdocs-deploy/*` prefix, not the `mkdocs` namespace listed in the registry above.
+  Pin against `mkdocs-deploy/*` until the namespaces are reconciled.
+² No release tags cut yet — consume via `@main` until the first `latex/*` tag is published.
+
+> Legacy duplicate tags from early tagging also exist (`python-setup/<pm>/*`, `release/github/*`). Prefer the
+> short namespaces in the table above. To regenerate this table, resolve each namespace's newest
+> `vX.Y.Z` tag with `git rev-list -n 1 <tag>`.
 
 ### Reference patterns
 
-| Pattern | Example | When to use |
-|---|---|---|
-| Floating major | `@uv/v1` | CI/CD, everyday workflows — auto-picks up patches and minor releases |
-| Pinned specific | `@uv/v1.0.0` | Production, compliance, security-critical workflows |
-| Branch | `@main` | Testing unreleased changes only — **not** for production |
+| Pattern         | Example      | When to use                                                          |
+|-----------------|--------------|----------------------------------------------------------------------|
+| Floating major  | `@uv/v1`     | CI/CD, everyday workflows — auto-picks up patches and minor releases |
+| Pinned specific | `@uv/v1.0.0` | Production, compliance, security-critical workflows                  |
+| Branch          | `@main`      | Testing unreleased changes only — **not** for production             |
 
 ## Versioning
 
