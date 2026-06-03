@@ -333,6 +333,86 @@ jobs:
           fi
           echo "[OK] script exited $rc when called with too few arguments"
 
+  test-linkify-refs:
+    name: linkify-refs.sh - ${{ matrix.case.label }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        case:
+          - { label: "commitizen (#N) form",
+              input: "- reorganize into subpackages (#31)",
+              expected: "- reorganize into subpackages ([#31](https://github.com/o/r/issues/31))" }
+          - { label: "scoped commit with ref",
+              input: "- **cli**: extract entry-point (#29)",
+              expected: "- **cli**: extract entry-point ([#29](https://github.com/o/r/issues/29))" }
+          - { label: "two inline refs both linked",
+              input: "fixes #1 and #2 together",
+              expected: "fixes [#1](https://github.com/o/r/issues/1) and [#2](https://github.com/o/r/issues/2) together" }
+          - { label: "ref at start of line",
+              input: "#7 was the cause",
+              expected: "[#7](https://github.com/o/r/issues/7) was the cause" }
+          - { label: "already-linked ref left untouched",
+              input: "see [#10](https://github.com/o/r/issues/10) here",
+              expected: "see [#10](https://github.com/o/r/issues/10) here" }
+          - { label: "no references unchanged",
+              input: "- downgrade numpy for compatibility",
+              expected: "- downgrade numpy for compatibility" }
+          - { label: "changelog version header unchanged",
+              input: "## 2.6.0 (2026-06-03)",
+              expected: "## 2.6.0 (2026-06-03)" }
+          - { label: "hash not followed by digit unchanged",
+              input: "use the # symbol or #tag",
+              expected: "use the # symbol or #tag" }
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run script
+        id: run
+        env:
+          INPUT: ${{ matrix.case.input }}
+        run: |
+          ACTUAL=$(printf '%s\n' "$INPUT" | bash actions/release/github/scripts/linkify-refs.sh "https://github.com/o/r")
+          echo "Input:    $INPUT"
+          echo "Output:   $ACTUAL"
+          {
+            echo "actual<<EOF"
+            echo "$ACTUAL"
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
+
+      - name: Assert
+        env:
+          ACTUAL: ${{ steps.run.outputs.actual }}
+          EXPECTED: ${{ matrix.case.expected }}
+        run: |
+          if [ "$ACTUAL" = "$EXPECTED" ]; then
+            echo "[OK] $ACTUAL"
+          else
+            echo "::error::expected [$EXPECTED] but got [$ACTUAL]"
+            exit 1
+          fi
+
+  test-linkify-refs-usage:
+    name: linkify-refs.sh - missing arg fails
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Calling without arg should exit non-zero
+        run: |
+          set +e
+          echo "body" | bash actions/release/github/scripts/linkify-refs.sh
+          rc=$?
+          set -e
+          if [ "$rc" -eq 0 ]; then
+            echo "::error::Expected non-zero exit when called without an argument; got 0"
+            exit 1
+          fi
+          echo "[OK] script exited $rc when called without an argument"
+
   summary:
     runs-on: ubuntu-latest
     needs:
@@ -342,6 +422,8 @@ jobs:
       - test-next-version-usage
       - test-validate-toolchain
       - test-validate-toolchain-usage
+      - test-linkify-refs
+      - test-linkify-refs-usage
     if: always()
     steps:
       - name: Summary
@@ -354,3 +436,5 @@ jobs:
           echo "- next-version usage:         ${{ needs.test-next-version-usage.result }}" >> $GITHUB_STEP_SUMMARY
           echo "- validate-toolchain matrix:  ${{ needs.test-validate-toolchain.result }}" >> $GITHUB_STEP_SUMMARY
           echo "- validate-toolchain usage:   ${{ needs.test-validate-toolchain-usage.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- linkify-refs matrix:        ${{ needs.test-linkify-refs.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- linkify-refs usage:         ${{ needs.test-linkify-refs-usage.result }}" >> $GITHUB_STEP_SUMMARY
