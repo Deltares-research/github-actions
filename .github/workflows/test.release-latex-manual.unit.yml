@@ -96,7 +96,7 @@ jobs:
           # Every input the action contract advertises must exist.
           for input in python-version tex-files \
                        markdown-input-dir latex-output-dir \
-                       latex-template-token upload-to-release github-token; do
+                       latex-template-token upload-to-release release-tag github-token; do
             if [ "$(yq eval ".inputs.\"$input\"" "$ACTION")" = "null" ]; then
               echo "::error::action.yml is missing input '$input'"
               exit 1
@@ -177,12 +177,14 @@ jobs:
             COND=$(yq eval ".runs.steps[] | select(.name == \"$step\") | .if" "$ACTION")
             echo "$COND" | grep -q "github-token != ''" || { echo "::error::$step not gated on github-token"; exit 1; }
           done
-          # The release event gate lives on "Get Release Tag"; the upload step
-          # inherits it transitively via steps.get_tag.outputs.tag (only set
-          # when Get Release Tag runs, i.e. on a release event).
+          # "Get Release Tag" runs either on a release event OR when an explicit
+          # release-tag input is supplied (the workflow_run-after-release case).
+          # The upload step inherits the gate transitively via the tag output.
           TAG_COND=$(yq eval '.runs.steps[] | select(.name == "Get Release Tag") | .if' "$ACTION")
           echo "$TAG_COND" | grep -q "github.event_name == 'release'" \
             || { echo "::error::Get Release Tag not gated on release event"; exit 1; }
+          echo "$TAG_COND" | grep -q "release-tag != ''" \
+            || { echo "::error::Get Release Tag does not honor the release-tag input"; exit 1; }
           UPLOAD_COND=$(yq eval '.runs.steps[] | select(.name == "Upload PDFs to Release") | .if' "$ACTION")
           echo "$UPLOAD_COND" | grep -q "steps.get_tag.outputs.tag != ''" \
             || { echo "::error::Upload PDFs to Release not gated on the release tag output"; exit 1; }

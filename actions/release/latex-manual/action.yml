@@ -45,9 +45,18 @@ inputs:
     required: false
     default: ''
   upload-to-release:
-    description: 'Whether to upload PDFs to GitHub release.'
+    description: 'Whether to upload PDFs to a GitHub release.'
     required: false
     default: 'true'
+  release-tag:
+    description: |
+      Tag of an existing GitHub release to attach the built PDFs to. When set,
+      the PDFs are uploaded to that release regardless of the triggering event
+      (useful when this action runs from a workflow_run after a release, where
+      there is no `release` event payload). When empty, the tag is taken from
+      the `release` event payload (so the upload only happens on a release).
+    required: false
+    default: ''
   github-token:
     description: 'GitHub token for release uploads.'
     required: false
@@ -207,14 +216,24 @@ runs:
         name: LaTeX-Documentation
         path: ${{ inputs.latex-output-dir }}/*.pdf
 
+    # Resolve which release tag to upload to: the explicit release-tag input
+    # wins (e.g. when run from a workflow_run after a release); otherwise fall
+    # back to the tag from a `release` event payload. Empty result => no upload.
     - name: Get Release Tag
-      if: inputs.tex-files != '' && inputs.upload-to-release == 'true' && inputs.github-token != '' && github.event_name == 'release'
+      if: inputs.tex-files != '' && inputs.upload-to-release == 'true' && inputs.github-token != '' && (inputs.release-tag != '' || github.event_name == 'release')
       id: get_tag
       shell: bash
       env:
-        RELEASE_TAG_NAME: ${{ github.event.release.tag_name }}
+        RELEASE_TAG_INPUT: ${{ inputs.release-tag }}
+        RELEASE_EVENT_TAG: ${{ github.event.release.tag_name }}
       run: |
-        echo "tag=$RELEASE_TAG_NAME" >> "$GITHUB_OUTPUT"
+        if [ -n "$RELEASE_TAG_INPUT" ]; then
+          tag="$RELEASE_TAG_INPUT"
+        else
+          tag="$RELEASE_EVENT_TAG"
+        fi
+        echo "tag=$tag" >> "$GITHUB_OUTPUT"
+        echo "Uploading PDFs to release tag: $tag"
 
     - name: Upload PDFs to Release
       if: inputs.tex-files != '' && inputs.upload-to-release == 'true' && inputs.github-token != '' && steps.get_tag.outputs.tag != ''
