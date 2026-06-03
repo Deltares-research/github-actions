@@ -419,6 +419,7 @@ runs:
         VERSION: ${{ steps.bump_version.outputs.NEW_VERSION }}
         CHANGELOG_FILE: ${{ steps.bump_version.outputs.CHANGELOG_FILE }}
         WORK_DIR: ${{ steps.bump_version.outputs.WORK_DIR }}
+        REPO_URL: ${{ github.server_url }}/${{ github.repository }}
       run: |
         echo "::group::Extracting release notes for $VERSION"
         cd "$WORK_DIR"
@@ -435,6 +436,12 @@ runs:
           echo "::warning::Could not extract release notes for $VERSION; falling back to a placeholder body"
           BODY="Release $VERSION"
         fi
+
+        # Commitizen writes PR/issue references as bare "(#31)", which GitHub
+        # does not auto-link in a custom release body. Rewrite them into full
+        # markdown links so they become clickable. Logic lives in the script
+        # below so it can be unit-tested directly; see test.release.unit.yml.
+        BODY=$(printf '%s\n' "$BODY" | bash "$GITHUB_ACTION_PATH/scripts/linkify-refs.sh" "$REPO_URL")
 
         echo "body<<RELEASE_NOTES_EOF" >> $GITHUB_OUTPUT
         echo "$BODY" >> $GITHUB_OUTPUT
