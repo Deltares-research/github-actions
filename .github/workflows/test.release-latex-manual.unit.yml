@@ -9,7 +9,7 @@ name: release/latex-manual - unit
 #   2. Behavioral (lightweight)  — run the action with tex-files='' so neither
 #      TeX Live nor pdflatex install. Each job isolates one input/behavior:
 #      default python, pinned python, custom dirs, multi-file conversion,
-#      graceful style-fetch failure (empty and bogus token). ~1 min each.
+#      graceful style-fetch failure, and the required-token guard. ~1 min each.
 #   3. End-to-end (heavy)        — tex-files set, so TeX Live installs (~5 min)
 #      and pdflatex runs. Covers the compile loop, bibtex branch, whitespace
 #      trimming, and artifact upload/download. Runs on workflow_dispatch, or on
@@ -18,10 +18,12 @@ name: release/latex-manual - unit
 #
 # External dependencies
 #   * Deltares styles: the action runs `ddocs get-tex-template` against the
-#     internal Deltares/LatexInstallation repo. Tests pass no (or a bogus)
-#     latex-template-token, so the fetch fails and the action's graceful path
-#     emits a `::warning::` and continues. Every behavioral job thus implicitly
-#     proves the fetch failure does not abort the pipeline.
+#     internal Deltares/LatexInstallation repo. latex-template-token is now
+#     required (the action fails fast if empty), so tests pass a deliberately
+#     invalid FAKE_TOKEN: it satisfies the required-token guard, then the fetch
+#     fails and the action's graceful path emits a `::warning::` and continues.
+#     Every behavioral job thus proves the fetch failure does not abort the
+#     pipeline. The required-token guard itself is covered by a dedicated job.
 #   * ddocs + pandoc: the action installs pandoc via apt (so ddocs/pypandoc
 #     never has to download it — that path hits the unauthenticated GitHub API
 #     and gets rate-limited on CI) and pip-installs ddocs from git. Tests let
@@ -35,6 +37,9 @@ on:
 env:
   MD_INPUT: tests/data/release-latex-manual/markdown
   MD_MULTI: tests/data/release-latex-manual/markdown-multi
+  # Non-empty but invalid token: passes the required-token guard, then the
+  # style fetch fails and the action continues via its graceful path.
+  FAKE_TOKEN: ghp_fakeInvalidTokenForTests00000000000000
 
 jobs:
   # ---------------------------------------------------------------------
@@ -130,14 +135,17 @@ jobs:
       - name: Verify input requiredness + defaults
         run: |
           ACTION=actions/release/latex-manual/action.yml
-          # latex-template-token and tex-files must be optional (their empty
-          # defaults drive the graceful-failure / skip-pdflatex behaviors).
-          for opt in latex-template-token tex-files; do
-            if [ "$(yq eval ".inputs.\"$opt\".required" "$ACTION")" = "true" ]; then
-              echo "::error::input '$opt' must not be required"
-              exit 1
-            fi
-          done
+          # tex-files must stay optional (its empty default skips pdflatex).
+          if [ "$(yq eval '.inputs."tex-files".required' "$ACTION")" = "true" ]; then
+            echo "::error::input 'tex-files' must not be required"
+            exit 1
+          fi
+          # latex-template-token must be required (the styles fetch needs it;
+          # the action fails fast when it is empty).
+          if [ "$(yq eval '.inputs."latex-template-token".required' "$ACTION")" != "true" ]; then
+            echo "::error::input 'latex-template-token' must be required"
+            exit 1
+          fi
           # Default dirs the consumers rely on must not silently change.
           test "$(yq eval '.inputs."markdown-input-dir".default' "$ACTION")" = "docs/mkdocs/user_docs" \
             || { echo "::error::markdown-input-dir default drifted"; exit 1; }
@@ -151,7 +159,7 @@ jobs:
         run: |
           ACTION=actions/release/latex-manual/action.yml
           STEPS=$(yq eval ".runs.steps[].name" "$ACTION")
-          for expected in "Define constants" "Install pandoc" "Set up Python" "Install ddocs" \
+          for expected in "Require latex-template-token" "Define constants" "Install pandoc" "Set up Python" "Install ddocs" \
                           "Fetch Deltares LaTeX Styles" "Generate LaTeX from Markdown" \
                           "Install LaTeX" "Compile PDF Documents" \
                           "Upload PDF Artifacts" "Get Release Tag" "Upload PDFs to Release"; do
@@ -160,6 +168,10 @@ jobs:
               exit 1
             fi
           done
+          # The required-token guard must run on an empty token.
+          GUARD_COND=$(yq eval '.runs.steps[] | select(.name == "Require latex-template-token") | .if' "$ACTION")
+          echo "$GUARD_COND" | grep -q "latex-template-token == ''" \
+            || { echo "::error::Require latex-template-token guard not gated on an empty token"; exit 1; }
           # texlive/pdflatex/upload steps must be gated on tex-files != ''.
           for step in "Install LaTeX" "Compile PDF Documents" "Upload PDF Artifacts" "Get Release Tag" "Upload PDFs to Release"; do
             COND=$(yq eval ".runs.steps[] | select(.name == \"$step\") | .if" "$ACTION")
@@ -230,9 +242,11 @@ jobs:
           cp $MD_INPUT/index.md docs/mkdocs/user_docs/index.md
 
       - name: Run action
-        # No latex-template-token → style fetch fails and the action continues
-        # via its graceful warning path. Exercised on every run.
+        # Invalid token → style fetch fails and the action continues via its
+        # graceful warning path. Exercised on every run.
         uses: ./actions/release/latex-manual
+        with:
+          latex-template-token: ${{ env.FAKE_TOKEN }}
 
       - name: Verify ddocs is on PATH after install
         run: ddocs --version
@@ -266,6 +280,8 @@ jobs:
           cp $MD_INPUT/index.md docs/mkdocs/user_docs/index.md
       - name: Run action (no python-version)
         uses: ./actions/release/latex-manual
+        with:
+          latex-template-token: ${{ env.FAKE_TOKEN }}
       - name: Verify Python 3.12 active
         run: python -c "import sys; assert sys.version_info[:2] == (3, 12), sys.version"
 
@@ -283,6 +299,7 @@ jobs:
         uses: ./actions/release/latex-manual
         with:
           python-version: '3.13'
+          latex-template-token: ${{ env.FAKE_TOKEN }}
       - name: Verify Python 3.13 active
         run: python -c "import sys; assert sys.version_info[:2] == (3, 13), sys.version"
 
@@ -301,6 +318,7 @@ jobs:
         with:
           markdown-input-dir: custom/src
           latex-output-dir: custom/out
+          latex-template-token: ${{ env.FAKE_TOKEN }}
       - name: Verify .tex landed in the custom output dir
         run: |
           test -f custom/out/index.tex || {
@@ -327,6 +345,8 @@ jobs:
           cp $MD_MULTI/beta.md  docs/mkdocs/user_docs/beta.md
       - name: Run action
         uses: ./actions/release/latex-manual
+        with:
+          latex-template-token: ${{ env.FAKE_TOKEN }}
       - name: Verify both .tex files were produced
         run: |
           for f in alpha beta; do
@@ -335,23 +355,25 @@ jobs:
             }
           done
 
-  # A bogus token still drives the action down the token→auth→fail→graceful
-  # path (distinct from the empty-token anonymous path) without aborting.
-  bogus-template-token-graceful:
-    name: behavioral — bogus latex-template-token fails gracefully
+  # An empty latex-template-token must fail fast, before any install/compile.
+  require-token-empty-fails:
+    name: behavioral — empty latex-template-token fails fast
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Stage fixture
-        run: |
-          mkdir -p docs/mkdocs/user_docs docs/end-user-docs/source
-          cp $MD_INPUT/index.md docs/mkdocs/user_docs/index.md
-      - name: Run action with an invalid token
+      - name: Run action with no token (expected to fail)
+        id: run
+        continue-on-error: true
         uses: ./actions/release/latex-manual
         with:
-          latex-template-token: 'ghp_thisIsNotARealTokenJustForTesting000000'
-      - name: Verify conversion still happened despite bad token
-        run: test -f docs/end-user-docs/source/index.tex
+          latex-template-token: ''
+      - name: Assert the action failed at the guard
+        run: |
+          if [ "${{ steps.run.outcome }}" != "failure" ]; then
+            echo "::error::action should have failed fast with an empty latex-template-token"
+            exit 1
+          fi
+          echo "failed fast as expected"
 
   # markdown-input-dir='' skips the conversion entirely (for pure-LaTeX repos
   # that author .tex directly). No markdown is staged, and the default input
@@ -366,10 +388,11 @@ jobs:
         uses: ./actions/release/latex-manual
         with:
           markdown-input-dir: ''
+          latex-template-token: ${{ env.FAKE_TOKEN }}
       - name: Verify no .tex was produced by conversion
         run: |
-          # The style fetch (no token) creates docs/end-user-docs/source but
-          # leaves it empty; conversion is skipped, so no .tex should exist.
+          # The style fetch (invalid token) creates docs/end-user-docs/source
+          # but leaves it empty; conversion is skipped, so no .tex should exist.
           if compgen -G "docs/end-user-docs/source/*.tex" > /dev/null; then
             echo "::error::conversion ran despite empty markdown-input-dir"
             ls -la docs/end-user-docs/source
@@ -411,6 +434,7 @@ jobs:
         uses: ./actions/release/latex-manual
         with:
           tex-files: 'sample, sample2'   # space exercises the xargs trim
+          latex-template-token: ${{ env.FAKE_TOKEN }}
 
       - name: Verify both PDFs were produced
         run: |

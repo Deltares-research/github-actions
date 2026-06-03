@@ -37,13 +37,11 @@ inputs:
   latex-template-token:
     description: |
       Token with read access to the internal Deltares/LatexInstallation repo,
-      from which ddocs fetches the LaTeX styles (get-tex-template). The
-      consumer's default GITHUB_TOKEN is scoped to its own repo and will NOT
-      work — supply a PAT or GitHub App token with access to that repo.
-      When empty, the style fetch is attempted anonymously and (for the
-      internal repo) fails gracefully with a warning; conversion still runs.
-    required: false
-    default: ''
+      from which ddocs fetches the LaTeX styles (get-tex-template). Required:
+      the action fails immediately if it is empty. The consumer's default
+      GITHUB_TOKEN is scoped to its own repo and will NOT work — supply a PAT
+      or GitHub App token with access to that repo.
+    required: true
   upload-to-release:
     description: 'Whether to upload PDFs to a GitHub release.'
     required: false
@@ -65,6 +63,16 @@ inputs:
 runs:
   using: 'composite'
   steps:
+    # Fail fast on a missing styles token, before any install or compile, so a
+    # misconfiguration surfaces immediately instead of as a confusing
+    # "*.sty not found" pdflatex error minutes later.
+    - name: Require latex-template-token
+      if: inputs.latex-template-token == ''
+      shell: bash
+      run: |
+        echo "::error::latex-template-token is empty. Provide a token with read access to Deltares/LatexInstallation (e.g. a repository secret)."
+        exit 1
+
     # Action-wide constants. Composite actions have no top-level `env:`, so we
     # publish them to $GITHUB_ENV in the first step and reference $VAR below.
     # DDOCS_REPO: pip target for the ddocs CLI. Pinned to the `latex-templates`
