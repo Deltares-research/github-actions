@@ -66,18 +66,27 @@ steps:
 
 ### Latest releases
 
-The latest released version of each action and the commit it points to. The floating major tag is
-force-pushed forward to the same commit on each backward-compatible release.
+The latest released version of each action and the **full commit SHA** it resolves to. Pin against the
+commit SHA (not the tag) when consuming these actions — action-pinning security scanners
+(e.g. StepSecurity Harden-Runner, OpenSSF Scorecard) flag floating tags and require an immutable
+40-character SHA. The floating major tag is force-pushed to the same commit on each backward-compatible
+release.
 
-| Action                         | Latest version          | Floating major      | Commit    | Released   |
-|--------------------------------|-------------------------|---------------------|-----------|------------|
-| `actions/python-setup/pip`     | `pip/v1.0.1`            | `pip/v1`            | `d60c876` | 2026-05-06 |
-| `actions/python-setup/uv`      | `uv/v1.0.1`             | `uv/v1`             | `d60c876` | 2026-05-06 |
-| `actions/python-setup/poetry`  | `poetry/v1.0.1`         | `poetry/v1`         | `d60c876` | 2026-05-06 |
-| `actions/python-setup/pixi`    | `pixi/v1.0.1`           | `pixi/v1`           | `d60c876` | 2026-05-06 |
-| `actions/mkdocs-deploy`        | `mkdocs-deploy/v1.0.1`¹ | `mkdocs-deploy/v1`¹ | `b655376` | 2026-05-11 |
-| `actions/release/github`       | `github-release/v1.1.4` | `github-release/v1` | `73618de` | 2026-06-03 |
-| `actions/release/latex-manual` | _unreleased_²           | —                   | —         | —          |
+| Action                         | Latest version          | Commit SHA (pin this)                      | Released   |
+|--------------------------------|-------------------------|--------------------------------------------|------------|
+| `actions/python-setup/pip`     | `pip/v1.0.1`            | `d60c8767cd8efb9c42850eabac6845cbe015d772` | 2026-05-06 |
+| `actions/python-setup/uv`      | `uv/v1.0.1`             | `d60c8767cd8efb9c42850eabac6845cbe015d772` | 2026-05-06 |
+| `actions/python-setup/poetry`  | `poetry/v1.0.1`         | `d60c8767cd8efb9c42850eabac6845cbe015d772` | 2026-05-06 |
+| `actions/python-setup/pixi`    | `pixi/v1.0.1`           | `d60c8767cd8efb9c42850eabac6845cbe015d772` | 2026-05-06 |
+| `actions/mkdocs-deploy`        | `mkdocs-deploy/v1.0.1`¹ | `b655376b4a9c0b0b37f7f730f840f11c7220d1a6` | 2026-05-11 |
+| `actions/release/github`       | `github-release/v1.1.4` | `73618deb1feaffe481d69063ce7bf229fab6598b` | 2026-06-03 |
+| `actions/release/latex-manual` | _unreleased_²           | —                                          | —          |
+
+Pin in a consumer workflow by appending the SHA and keeping the version in a trailing comment:
+
+```yaml
+- uses: Deltares-research/github-actions/actions/release/github@73618deb1feaffe481d69063ce7bf229fab6598b # github-release/v1.1.4
+```
 
 ¹ Published tags use the `mkdocs-deploy/*` prefix, not the `mkdocs` namespace listed in the registry above.
   Pin against `mkdocs-deploy/*` until the namespaces are reconciled.
