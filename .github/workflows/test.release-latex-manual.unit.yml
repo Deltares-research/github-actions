@@ -11,8 +11,10 @@ name: release/latex-manual - unit
 #      default python, pinned python, custom dirs, multi-file conversion,
 #      graceful style-fetch failure (empty and bogus token). ~1 min each.
 #   3. End-to-end (heavy)        — tex-files set, so TeX Live installs (~5 min)
-#      and pdflatex runs. Gated to workflow_dispatch. Covers the compile loop,
-#      bibtex branch, whitespace trimming, and artifact upload/download.
+#      and pdflatex runs. Covers the compile loop, bibtex branch, whitespace
+#      trimming, and artifact upload/download. Runs on workflow_dispatch, or on
+#      a pull_request ONLY when actions/release/latex-manual/ changed (the
+#      `detect-changes` job decides), so unrelated PRs aren't taxed ~5 min.
 #
 # External dependencies
 #   * Deltares styles: the action runs `ddocs get-tex-template` against the
@@ -35,6 +37,41 @@ env:
   MD_MULTI: tests/data/release-latex-manual/markdown-multi
 
 jobs:
+  # ---------------------------------------------------------------------
+  # Decide whether the heavy e2e tier should run on this event. It runs
+  # when the composite action changed in a PR (diff base..head touches
+  # actions/release/latex-manual/). On push the output is false; e2e then
+  # only runs via workflow_dispatch.
+  # ---------------------------------------------------------------------
+  detect-changes:
+    name: detect action changes
+    runs-on: ubuntu-latest
+    outputs:
+      action-changed: ${{ steps.diff.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # need base + head to diff a PR
+
+      - id: diff
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "not a pull_request; e2e gated to workflow_dispatch only"
+            exit 0
+          fi
+          git fetch --no-tags --depth=1 origin "$BASE_SHA" 2>/dev/null || true
+          if git diff --name-only "$BASE_SHA" "$HEAD_SHA" | grep -q '^actions/release/latex-manual/'; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "actions/release/latex-manual/ changed in this PR -> e2e will run"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "actions/release/latex-manual/ unchanged -> e2e skipped"
+          fi
+
   # =====================================================================
   # TIER 1 — STATIC: action.yml contract (no action execution)
   # =====================================================================
@@ -312,7 +349,8 @@ jobs:
 
   # =====================================================================
   # TIER 3 — END-TO-END: tex-files set → TeX Live + pdflatex (heavy)
-  # workflow_dispatch only.
+  # Runs on workflow_dispatch, or on a PR only when the composite action
+  # changed (decided by the detect-changes job).
   # =====================================================================
 
   # Compile loop + bibtex branch (both directions) + whitespace trimming.
@@ -320,8 +358,11 @@ jobs:
   #   * sample2.tex — no citations → bibtex must be skipped.
   # tex-files uses a space after the comma to exercise the `xargs` trim.
   pdf-compile-end-to-end:
-    name: e2e — pdflatex compile (workflow_dispatch only)
-    if: github.event_name == 'workflow_dispatch'
+    name: e2e — pdflatex compile
+    needs: detect-changes
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' && needs.detect-changes.outputs.action-changed == 'true')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -371,9 +412,11 @@ jobs:
   # The artifact uploaded by the action above is downloadable and contains the
   # PDFs. Runs after the compile job and pulls the named artifact back.
   pdf-artifact-uploaded:
-    name: e2e — PDF artifact is uploaded (workflow_dispatch only)
-    if: github.event_name == 'workflow_dispatch'
-    needs: pdf-compile-end-to-end
+    name: e2e — PDF artifact is uploaded
+    needs: [detect-changes, pdf-compile-end-to-end]
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' && needs.detect-changes.outputs.action-changed == 'true')
     runs-on: ubuntu-latest
     steps:
       - name: Download the action's artifact
