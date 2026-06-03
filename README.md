@@ -72,15 +72,15 @@ commit SHA (not the tag) when consuming these actions — action-pinning securit
 40-character SHA. The floating major tag is force-pushed to the same commit on each backward-compatible
 release.
 
-| Action                         | Latest version          | Commit SHA (pin this)                      | Released   |
-|--------------------------------|-------------------------|--------------------------------------------|------------|
-| `actions/python-setup/pip`     | `pip/v1.0.1`            | `d60c8767cd8efb9c42850eabac6845cbe015d772` | 2026-05-06 |
-| `actions/python-setup/uv`      | `uv/v1.0.1`             | `d60c8767cd8efb9c42850eabac6845cbe015d772` | 2026-05-06 |
-| `actions/python-setup/poetry`  | `poetry/v1.0.1`         | `d60c8767cd8efb9c42850eabac6845cbe015d772` | 2026-05-06 |
-| `actions/python-setup/pixi`    | `pixi/v1.0.1`           | `d60c8767cd8efb9c42850eabac6845cbe015d772` | 2026-05-06 |
-| `actions/mkdocs-deploy`        | `mkdocs-deploy/v1.0.1`¹ | `b655376b4a9c0b0b37f7f730f840f11c7220d1a6` | 2026-05-11 |
-| `actions/release/github`       | `github-release/v1.1.4` | `73618deb1feaffe481d69063ce7bf229fab6598b` | 2026-06-03 |
-| `actions/release/latex-manual` | _unreleased_²           | —                                          | —          |
+| Action                         | Latest version          | Commit SHA (pin this)                      |
+|--------------------------------|-------------------------|--------------------------------------------|
+| `actions/python-setup/pip`     | `pip/v1.0.1`            | `d60c8767cd8efb9c42850eabac6845cbe015d772` |
+| `actions/python-setup/uv`      | `uv/v1.0.1`             | `d60c8767cd8efb9c42850eabac6845cbe015d772` |
+| `actions/python-setup/poetry`  | `poetry/v1.0.1`         | `d60c8767cd8efb9c42850eabac6845cbe015d772` |
+| `actions/python-setup/pixi`    | `pixi/v1.0.1`           | `d60c8767cd8efb9c42850eabac6845cbe015d772` |
+| `actions/mkdocs-deploy`        | `mkdocs-deploy/v1.0.1`¹ | `b655376b4a9c0b0b37f7f730f840f11c7220d1a6` |
+| `actions/release/github`       | `github-release/v1.1.4` | `73618deb1feaffe481d69063ce7bf229fab6598b` |
+| `actions/release/latex-manual` | _unreleased_²           | —                                          |
 
 Pin in a consumer workflow by appending the SHA and keeping the version in a trailing comment:
 
