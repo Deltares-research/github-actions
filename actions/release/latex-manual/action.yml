@@ -1,13 +1,14 @@
 name: 'Generate LaTeX Documentation'
 description: |
   Convert Markdown to LaTeX (and optionally PDF) using the ddocs CLI
-  (https://github.com/Deltares-research/doc_utils) and Deltares LaTeX styles
-  fetched from SVN.
+  (https://github.com/Deltares-research/doc_utils). Deltares LaTeX styles are
+  fetched by ddocs (get-tex-template) from the internal Deltares/LatexInstallation
+  repo.
 
-  Self-contained: installs its own Python, pandoc, subversion, ddocs, and
-  (when compiling PDFs) TeX Live. Does NOT touch the consumer's pyproject,
-  lock file, or virtualenv — the action is a documentation pipeline that
-  runs in isolation from the project's own dependency management.
+  Self-contained: installs its own Python and ddocs (which pulls in pandoc via
+  pypandoc), and TeX Live when compiling PDFs. Does NOT touch the consumer's
+  pyproject, lock file, or virtualenv — the action is a documentation pipeline
+  that runs in isolation from the project's own dependency management.
 
 inputs:
   python-version:
@@ -29,15 +30,16 @@ inputs:
     description: 'Output directory for LaTeX (and PDF) files.'
     required: false
     default: 'docs/end-user-docs/source'
-  svn-username:
-    description: 'SVN username for Deltares styles.'
-    required: true
-  svn-password:
-    description: 'SVN password for Deltares styles.'
-    required: true
-  svn-repo-url:
-    description: 'SVN repository URL for Deltares styles.'
-    required: true
+  latex-template-token:
+    description: |
+      Token with read access to the internal Deltares/LatexInstallation repo,
+      from which ddocs fetches the LaTeX styles (get-tex-template). The
+      consumer's default GITHUB_TOKEN is scoped to its own repo and will NOT
+      work — supply a PAT or GitHub App token with access to that repo.
+      When empty, the style fetch is attempted anonymously and (for the
+      internal repo) fails gracefully with a warning; conversion still runs.
+    required: false
+    default: ''
   upload-to-release:
     description: 'Whether to upload PDFs to GitHub release.'
     required: false
@@ -50,63 +52,46 @@ inputs:
 runs:
   using: 'composite'
   steps:
-    - name: Install System Dependencies
+    # Action-wide constants. Composite actions have no top-level `env:`, so we
+    # publish them to $GITHUB_ENV in the first step and reference $VAR below.
+    # DDOCS_REPO: pip target for the ddocs CLI. Pinned to the `latex-templates`
+    # branch — change the ref after the `@` to upgrade ddocs. This is the
+    # single source of truth.
+    - name: Define constants
       shell: bash
       run: |
-        echo "::group::Installing pandoc + subversion"
-        sudo apt-get update
-        sudo apt-get install -y pandoc subversion
-        pandoc --version
-        echo "::endgroup::"
+        echo "DDOCS_REPO=git+https://github.com/Deltares-research/doc_utils.git@latex-templates" >> "$GITHUB_ENV"
 
     - name: Set up Python
       uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
       with:
         python-version: ${{ inputs.python-version }}
 
+    # ddocs brings pandoc with it (via its pypandoc dependency): the
+    # markdown-to-latex step downloads a pandoc binary automatically if one
+    # isn't already on PATH, so there is no separate pandoc install step.
     - name: Install ddocs
       shell: bash
       run: |
         echo "::group::Installing ddocs"
         python -m pip install --upgrade pip
-        python -m pip install "git+https://github.com/Deltares-research/doc_utils.git@b93c6611d49bf24183423f8445e4816bfc6bd559"  # 0.1.0
+        python -m pip install "$DDOCS_REPO"
         ddocs --version
         echo "::endgroup::"
 
-    - name: Checkout Deltares LaTeX Styles
+    - name: Fetch Deltares LaTeX Styles
       shell: bash
       env:
-        SVN_USERNAME: ${{ inputs.svn-username }}
-        SVN_PASSWORD: ${{ inputs.svn-password }}
-        SVN_REPO_URL: ${{ inputs.svn-repo-url }}
+        # ddocs get-tex-template reads GITHUB_TOKEN for HTTPS auth against the
+        # internal Deltares/LatexInstallation repo. --no-ssh disables the SSH
+        # fallback (CI runners have no key), so auth is token → anonymous.
+        GITHUB_TOKEN: ${{ inputs.latex-template-token }}
         LATEX_DIR: ${{ inputs.latex-output-dir }}
       run: |
-        echo "::group::Checkout Deltares LaTeX Styles"
-        cd "$LATEX_DIR"
-
-        echo "::group::Downloading from SVN Repository"
-        if ! svn checkout --username "$SVN_USERNAME" --password "$SVN_PASSWORD" --non-interactive "$SVN_REPO_URL" temp_svn; then
-          echo "::warning::Failed to checkout SVN repository. Continuing without Deltares styles."
-          echo "::endgroup::"
-          exit 0
+        echo "::group::Fetching Deltares LaTeX styles via ddocs get-tex-template"
+        if ! ddocs get-tex-template --output-dir "$LATEX_DIR" --no-ssh; then
+          echo "::warning::Failed to fetch Deltares LaTeX templates. Continuing without Deltares styles."
         fi
-        echo "::endgroup::"
-
-        echo "::group::Copying LaTeX Style Files"
-        if [ -d "temp_svn/templates/latex/tex/latex/deltares" ]; then
-          cp -r temp_svn/templates/latex/tex/latex/deltares/* . || echo "::warning::Failed to copy deltares styles"
-        fi
-
-        if [ -d "temp_svn/templates/latex/tex/latex/nomentbl/deltares" ]; then
-          cp -r temp_svn/templates/latex/tex/latex/nomentbl/deltares/* . || echo "::warning::Failed to copy nomentbl styles"
-        fi
-
-        if [ -d "temp_svn/templates/latex/bibtex/bst/deltares" ]; then
-          cp -r temp_svn/templates/latex/bibtex/bst/deltares/* . || echo "::warning::Failed to copy bibtex styles"
-        fi
-
-        rm -rf temp_svn
-        echo "Deltares LaTeX styles setup completed."
         echo "::endgroup::"
 
     - name: Generate LaTeX from Markdown

@@ -4,18 +4,19 @@ name: release/latex-manual - unit
 #
 # Strategy
 # --------
-# The action is self-contained — it installs its own Python, ddocs, pandoc,
-# subversion, and (when compiling PDFs) TeX Live. It does not interact with
-# the consumer's pyproject or virtualenv, so tests don't need the per-PM
-# fixture matrix used elsewhere in this repo.
+# The action is self-contained — it installs its own Python and ddocs (which
+# pulls in pandoc via pypandoc), and TeX Live when compiling PDFs. It does not
+# interact with the consumer's pyproject or virtualenv, so tests don't need the
+# per-PM fixture matrix used elsewhere in this repo.
 #
 # Two external dependencies are handled as follows:
-#   * SVN: every job passes bogus credentials. The action's "Checkout
-#     Deltares LaTeX Styles" step has a graceful failure path that emits a
-#     `::warning::` and exits 0, which lets the rest of the action run. So
-#     all jobs implicitly verify that path stays wired up.
+#   * Deltares styles: the action runs `ddocs get-tex-template` to fetch
+#     LaTeX styles from the internal Deltares/LatexInstallation repo. Tests
+#     pass no latex-template-token, so the fetch fails and the action's graceful
+#     path emits a `::warning::` and continues. Every job thus implicitly
+#     verifies that the fetch failure does not abort the pipeline.
 #   * texlive + pdflatex: the action gates these on `tex-files != ''`. The
-#     unit job leaves `tex-files` empty (the default), skipping both the
+#     unit jobs leave `tex-files` empty (the default), skipping both the
 #     ~5-minute apt install and pdflatex. The `pdf-compile-end-to-end` job
 #     exercises the heavy path on `workflow_dispatch` only.
 #
@@ -30,10 +31,6 @@ on:
 
 env:
   MD_INPUT: tests/data/release-latex-manual/markdown
-  # Bogus SVN creds — the action gracefully continues on auth failure.
-  SVN_USERNAME: nobody
-  SVN_PASSWORD: nopass
-  SVN_REPO_URL: https://invalid.invalid/svn
 
 jobs:
   # ---------------------------------------------------------------------
@@ -60,35 +57,33 @@ jobs:
           # Every input the action contract advertises must exist.
           for input in python-version tex-files \
                        markdown-input-dir latex-output-dir \
-                       svn-username svn-password svn-repo-url \
-                       upload-to-release github-token; do
+                       latex-template-token upload-to-release github-token; do
             if [ "$(yq eval ".inputs.\"$input\"" "$ACTION")" = "null" ]; then
               echo "::error::action.yml is missing input '$input'"
               exit 1
             fi
           done
-          # Inputs explicitly removed in the slim refactor — guard against
-          # accidental reintroduction (no PM coupling, ddocs is hardcoded
-          # to the upstream git URL, artifact upload always fires when
-          # there are PDFs).
+          # Inputs explicitly removed in refactors — guard against accidental
+          # reintroduction. No PM coupling; ddocs is hardcoded to the upstream
+          # git URL; artifact upload always fires when there are PDFs; and the
+          # SVN inputs were replaced by ddocs get-tex-template (latex-template-token).
           for unwanted in package-manager dependency-groups install-extras \
                           poetry-extras pixi-environments \
                           pixi-activate-environment verify-lock ddocs-source \
-                          upload-artifacts artifact-name artifact-retention-days; do
+                          upload-artifacts artifact-name artifact-retention-days \
+                          svn-username svn-password svn-repo-url; do
             if [ "$(yq eval ".inputs.\"$unwanted\"" "$ACTION")" != "null" ]; then
-              echo "::error::action.yml must NOT have input '$unwanted' (slim refactor removed it)"
+              echo "::error::action.yml must NOT have input '$unwanted' (removed in a refactor)"
               exit 1
             fi
           done
-          # SVN creds must remain required — silently using empty strings
-          # would mask credential-passing bugs in consumers.
-          for input in svn-username svn-password svn-repo-url; do
-            REQ=$(yq eval ".inputs.\"$input\".required" "$ACTION")
-            if [ "$REQ" != "true" ]; then
-              echo "::error::input '$input' must be required, got: $REQ"
-              exit 1
-            fi
-          done
+          # latex-template-token must NOT be required — empty means "fetch
+          # styles anonymously and continue gracefully if that fails".
+          REQ=$(yq eval '.inputs."latex-template-token".required' "$ACTION")
+          if [ "$REQ" = "true" ]; then
+            echo "::error::latex-template-token must not be required (empty = graceful style-fetch failure)"
+            exit 1
+          fi
           # tex-files must NOT be required — empty means "skip pdflatex".
           REQ=$(yq eval '.inputs."tex-files".required' "$ACTION")
           if [ "$REQ" = "true" ]; then
@@ -101,8 +96,8 @@ jobs:
             exit 1
           fi
           STEPS=$(yq eval ".runs.steps[].name" "$ACTION")
-          for expected in "Install System Dependencies" "Set up Python" "Install ddocs" \
-                          "Checkout Deltares LaTeX Styles" "Generate LaTeX from Markdown" \
+          for expected in "Set up Python" "Install ddocs" \
+                          "Fetch Deltares LaTeX Styles" "Generate LaTeX from Markdown" \
                           "Install LaTeX" "Compile PDF Documents" \
                           "Upload PDF Artifacts" "Upload PDFs to Release"; do
             if ! echo "$STEPS" | grep -Fxq "$expected"; then
@@ -125,9 +120,9 @@ jobs:
           echo "pdflatex gating OK"
 
   # ---------------------------------------------------------------------
-  # Happy path: install + ddocs + svn-graceful-failure + markdown-to-latex.
-  # Asserts the converted .tex appears, and that pdflatex/texlive did NOT
-  # run (tex-files is empty by default).
+  # Happy path: install + ddocs + graceful style-fetch failure (no token)
+  # + markdown-to-latex. Asserts the converted .tex appears, and that
+  # pdflatex/texlive did NOT run (tex-files is empty by default).
   # ---------------------------------------------------------------------
   convert-markdown-to-latex:
     name: convert markdown → latex (no pdflatex)
@@ -141,11 +136,9 @@ jobs:
           cp $MD_INPUT/index.md docs/mkdocs/user_docs/index.md
 
       - name: Run action
+        # No latex-template-token → the style fetch fails and the action continues
+        # via its graceful warning path. This exercises that path on every run.
         uses: ./actions/release/latex-manual
-        with:
-          svn-username: ${{ env.SVN_USERNAME }}
-          svn-password: ${{ env.SVN_PASSWORD }}
-          svn-repo-url: ${{ env.SVN_REPO_URL }}
 
       - name: Verify ddocs is on PATH after install
         run: ddocs --version
@@ -188,9 +181,6 @@ jobs:
         uses: ./actions/release/latex-manual
         with:
           python-version: '3.13'
-          svn-username: ${{ env.SVN_USERNAME }}
-          svn-password: ${{ env.SVN_PASSWORD }}
-          svn-repo-url: ${{ env.SVN_REPO_URL }}
 
       - name: Verify Python 3.13 active
         run: python -c "import sys; assert sys.version_info[:2] == (3, 13), sys.version"
@@ -229,9 +219,6 @@ jobs:
         uses: ./actions/release/latex-manual
         with:
           tex-files: 'sample,sample2'
-          svn-username: ${{ env.SVN_USERNAME }}
-          svn-password: ${{ env.SVN_PASSWORD }}
-          svn-repo-url: ${{ env.SVN_REPO_URL }}
 
       - name: Verify both PDFs were produced
         run: |
