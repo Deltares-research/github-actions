@@ -5,10 +5,11 @@ description: |
   fetched by ddocs (get-tex-template) from the internal Deltares/LatexInstallation
   repo.
 
-  Self-contained: installs its own pandoc, Python, ddocs, and TeX Live (when
-  compiling PDFs). Does NOT touch the consumer's pyproject, lock file, or
-  virtualenv — the action is a documentation pipeline that runs in isolation
-  from the project's own dependency management.
+  Self-contained: installs its own Python and ddocs (ddocs bundles pandoc via
+  pypandoc-binary and installs pdflatex via TinyTeX when compiling PDFs). Does
+  NOT touch the consumer's pyproject, lock file, or virtualenv — the action is a
+  documentation pipeline that runs in isolation from the project's own
+  dependency management.
 
 inputs:
   python-version:
@@ -131,21 +132,24 @@ runs:
           --output "$LATEX_OUTPUT_DIR"
         echo "::endgroup::"
 
+    # Install pdflatex via ddocs (TinyTeX + tlmgr collections mirroring the
+    # texlive-* set), instead of apt. `ddocs check-pdflatex` prepends TinyTeX's
+    # bin to PATH only for its own process, so we resolve that bin dir and
+    # append it to $GITHUB_PATH — otherwise the separate bash compile step below
+    # would not find pdflatex.
     - name: Install LaTeX
       if: inputs.tex-files != ''
       shell: bash
       run: |
-        echo "::group::Installing LaTeX Packages"
-        sudo apt-get update
-        sudo apt-get install -y \
-          texlive-latex-base \
-          texlive-latex-extra \
-          texlive-fonts-recommended \
-          texlive-fonts-extra \
-          texlive-bibtex-extra \
-          texlive-science biber
-
-        pdflatex --version
+        echo "::group::Installing pdflatex via ddocs (TinyTeX)"
+        ddocs check-pdflatex
+        BIN=$(python -c "from ddocs.latex import find_tex_bin_dir; print(find_tex_bin_dir() or '')")
+        if [ -z "$BIN" ]; then
+          echo "::error::Could not locate the TinyTeX bin dir after 'ddocs check-pdflatex'"
+          exit 1
+        fi
+        echo "$BIN" >> "$GITHUB_PATH"
+        "$BIN/pdflatex" --version
         echo "::endgroup::"
 
     - name: Compile PDF Documents
