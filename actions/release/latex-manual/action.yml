@@ -82,7 +82,7 @@ runs:
     - name: Define constants
       shell: bash
       run: |
-        echo "DDOCS_REPO=git+https://github.com/Deltares-research/doc_utils.git@b7310ce9ccb79fcaca7d6947b9f5497faea4fa26" >> "$GITHUB_ENV"
+        echo "DDOCS_REPO=git+https://github.com/Deltares-research/doc_utils.git@2e7c45171474f0de95829bd7209b05cee1f292a0" >> "$GITHUB_ENV"
 
     - name: Set up Python
       uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
