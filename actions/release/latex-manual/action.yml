@@ -6,9 +6,10 @@ description: |
   repo.
 
   Self-contained: installs its own Python and ddocs (ddocs bundles pandoc via
-  pypandoc-binary), and TeX Live via apt when compiling PDFs. Does NOT touch the
-  consumer's pyproject, lock file, or virtualenv — the action is a documentation
-  pipeline that runs in isolation from the project's own dependency management.
+  pypandoc-binary and installs pdflatex via TinyTeX when compiling PDFs). Does
+  NOT touch the consumer's pyproject, lock file, or virtualenv — the action is a
+  documentation pipeline that runs in isolation from the project's own
+  dependency management.
 
 inputs:
   python-version:
@@ -75,13 +76,13 @@ runs:
 
     # Action-wide constants. Composite actions have no top-level `env:`, so we
     # publish them to $GITHUB_ENV in the first step and reference $VAR below.
-    # DDOCS_REPO: pip target for the ddocs CLI. Pinned to the `latex-templates`
-    # branch — change the ref after the `@` to upgrade ddocs. This is the
+    # DDOCS_REPO: pip target for the ddocs CLI, pinned to a commit SHA for
+    # reproducibility — bump the SHA after the `@` to upgrade ddocs. This is the
     # single source of truth.
     - name: Define constants
       shell: bash
       run: |
-        echo "DDOCS_REPO=git+https://github.com/Deltares-research/doc_utils.git@latex-templates" >> "$GITHUB_ENV"
+        echo "DDOCS_REPO=git+https://github.com/Deltares-research/doc_utils.git@bad343d1335c4626401191fed0e189d6189e25cc" >> "$GITHUB_ENV"
 
     - name: Set up Python
       uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
@@ -131,25 +132,23 @@ runs:
           --output "$LATEX_OUTPUT_DIR"
         echo "::endgroup::"
 
-    # Install pdflatex via apt. ddocs' `check-pdflatex` was tried but its TinyTeX
-    # installer download (yihui.org) returns HTTP 403 on CI runners, so apt is
-    # the reliable backend. (pandoc, by contrast, ships bundled via
-    # pypandoc-binary and needs no install step.)
+    # Install pdflatex via ddocs (TinyTeX + tlmgr collections mirroring the
+    # texlive-* set). check-pdflatex prepends TinyTeX's bin to PATH only for its
+    # own process, so resolve that bin dir and append it to $GITHUB_PATH —
+    # otherwise the separate bash compile step below would not find pdflatex.
     - name: Install LaTeX
       if: inputs.tex-files != ''
       shell: bash
       run: |
-        echo "::group::Installing LaTeX Packages"
-        sudo apt-get update
-        sudo apt-get install -y \
-          texlive-latex-base \
-          texlive-latex-extra \
-          texlive-fonts-recommended \
-          texlive-fonts-extra \
-          texlive-bibtex-extra \
-          texlive-science biber
-
-        pdflatex --version
+        echo "::group::Installing pdflatex via ddocs (TinyTeX)"
+        ddocs check-pdflatex
+        BIN=$(python -c "from ddocs.latex import find_tex_bin_dir; print(find_tex_bin_dir() or '')")
+        if [ -z "$BIN" ]; then
+          echo "::error::Could not locate the TinyTeX bin dir after 'ddocs check-pdflatex'"
+          exit 1
+        fi
+        echo "$BIN" >> "$GITHUB_PATH"
+        "$BIN/pdflatex" --version
         echo "::endgroup::"
 
     - name: Compile PDF Documents
