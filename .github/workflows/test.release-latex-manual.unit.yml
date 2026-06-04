@@ -10,12 +10,12 @@ name: release/latex-manual - unit
 #      TeX Live nor pdflatex install. Each job isolates one input/behavior:
 #      default python, pinned python, custom dirs, multi-file conversion,
 #      graceful style-fetch failure, and the required-token guard. ~1 min each.
-#   3. End-to-end (heavy)        — tex-files set, so ddocs installs pdflatex via
-#      TinyTeX + tlmgr collections, then pdflatex runs. Covers the compile loop,
-#      bibtex branch, whitespace trimming, and artifact upload/download. Runs on
+#   3. End-to-end (heavy)        — tex-files set, so TeX Live installs via apt
+#      (~5 min) and pdflatex runs. Covers the compile loop, bibtex branch,
+#      whitespace trimming, and artifact upload/download. Runs on
 #      workflow_dispatch, or on a pull_request ONLY when
 #      actions/release/latex-manual/ changed (the `detect-changes` job decides),
-#      so unrelated PRs aren't taxed.
+#      so unrelated PRs aren't taxed ~5 min.
 #
 # External dependencies
 #   * Deltares styles: the action runs `ddocs get-tex-template` against the

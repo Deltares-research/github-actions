@@ -6,10 +6,9 @@ description: |
   repo.
 
   Self-contained: installs its own Python and ddocs (ddocs bundles pandoc via
-  pypandoc-binary and installs pdflatex via TinyTeX when compiling PDFs). Does
-  NOT touch the consumer's pyproject, lock file, or virtualenv — the action is a
-  documentation pipeline that runs in isolation from the project's own
-  dependency management.
+  pypandoc-binary), and TeX Live via apt when compiling PDFs. Does NOT touch the
+  consumer's pyproject, lock file, or virtualenv — the action is a documentation
+  pipeline that runs in isolation from the project's own dependency management.
 
 inputs:
   python-version:
@@ -132,23 +131,24 @@ runs:
           --output "$LATEX_OUTPUT_DIR"
         echo "::endgroup::"
 
-    # Install pdflatex via ddocs (TinyTeX + tlmgr collections mirroring the
-    # texlive-* set). check-pdflatex prepends TinyTeX's bin to PATH only for its
-    # own process, so resolve that bin dir and append it to $GITHUB_PATH —
-    # otherwise the separate bash compile step below would not find pdflatex.
+    # Install pdflatex via apt. ddocs' check-pdflatex (TinyTeX) works but is slow
+    # — it downloads the TeX toolchain at runtime — so apt's prebuilt texlive
+    # packages are the faster, reliable backend on CI.
     - name: Install LaTeX
       if: inputs.tex-files != ''
       shell: bash
       run: |
-        echo "::group::Installing pdflatex via ddocs (TinyTeX)"
-        ddocs check-pdflatex
-        BIN=$(python -c "from ddocs.latex import find_tex_bin_dir; print(find_tex_bin_dir() or '')")
-        if [ -z "$BIN" ]; then
-          echo "::error::Could not locate the TinyTeX bin dir after 'ddocs check-pdflatex'"
-          exit 1
-        fi
-        echo "$BIN" >> "$GITHUB_PATH"
-        "$BIN/pdflatex" --version
+        echo "::group::Installing LaTeX Packages"
+        sudo apt-get update
+        sudo apt-get install -y \
+          texlive-latex-base \
+          texlive-latex-extra \
+          texlive-fonts-recommended \
+          texlive-fonts-extra \
+          texlive-bibtex-extra \
+          texlive-science biber
+
+        pdflatex --version
         echo "::endgroup::"
 
     - name: Compile PDF Documents
