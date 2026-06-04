@@ -83,26 +83,15 @@ runs:
       run: |
         echo "DDOCS_REPO=git+https://github.com/Deltares-research/doc_utils.git@latex-templates" >> "$GITHUB_ENV"
 
-    # Install pandoc from apt so it is already on PATH. ddocs/pypandoc would
-    # otherwise try to download a pandoc binary at runtime, which resolves the
-    # "latest" release via the unauthenticated GitHub API and gets HTTP 403
-    # rate-limited on shared CI runners. With pandoc present, ddocs's
-    # check_pandoc_installed() passes its `pandoc --version` check and never
-    # hits the API.
-    - name: Install pandoc
-      shell: bash
-      run: |
-        echo "::group::Installing pandoc"
-        sudo apt-get update
-        sudo apt-get install -y pandoc
-        pandoc --version
-        echo "::endgroup::"
-
     - name: Set up Python
       uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
       with:
         python-version: ${{ inputs.python-version }}
 
+    # ddocs depends on pypandoc-binary, which bundles the pandoc executable in
+    # the wheel — so installing ddocs also provides pandoc (no apt, no runtime
+    # download). The markdown-to-latex step puts the bundled binary on PATH via
+    # ddocs's check_pandoc_installed().
     - name: Install ddocs
       shell: bash
       run: |

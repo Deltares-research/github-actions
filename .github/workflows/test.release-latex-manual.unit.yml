@@ -24,10 +24,10 @@ name: release/latex-manual - unit
 #     fails and the action's graceful path emits a `::warning::` and continues.
 #     Every behavioral job thus proves the fetch failure does not abort the
 #     pipeline. The required-token guard itself is covered by a dedicated job.
-#   * ddocs + pandoc: the action installs pandoc via apt (so ddocs/pypandoc
-#     never has to download it — that path hits the unauthenticated GitHub API
-#     and gets rate-limited on CI) and pip-installs ddocs from git. Tests let
-#     that happen and assert on the produced .tex.
+#   * ddocs + pandoc: the action pip-installs ddocs from git; ddocs depends on
+#     pypandoc-binary, which bundles the pandoc executable in the wheel, so no
+#     apt install or runtime download is needed. Tests let that happen and
+#     assert on the produced .tex (which proves the bundled pandoc works).
 
 on:
   push:
@@ -159,7 +159,7 @@ jobs:
         run: |
           ACTION=actions/release/latex-manual/action.yml
           STEPS=$(yq eval ".runs.steps[].name" "$ACTION")
-          for expected in "Require latex-template-token" "Define constants" "Install pandoc" "Set up Python" "Install ddocs" \
+          for expected in "Require latex-template-token" "Define constants" "Set up Python" "Install ddocs" \
                           "Fetch Deltares LaTeX Styles" "Generate LaTeX from Markdown" \
                           "Install LaTeX" "Compile PDF Documents" \
                           "Upload PDF Artifacts" "Get Release Tag" "Upload PDFs to Release"; do
