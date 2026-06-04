@@ -88,6 +88,14 @@ runs:
       with:
         python-version: ${{ inputs.python-version }}
 
+    # Cache pip's download/wheel cache so ddocs and its dependencies — notably
+    # the ~34 MB pypandoc-binary wheel — are not re-downloaded on every run.
+    - name: Cache pip
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      with:
+        path: ~/.cache/pip
+        key: latex-manual-pip-${{ runner.os }}-py${{ inputs.python-version }}
+
     # ddocs depends on pypandoc-binary, which bundles the pandoc executable in
     # the wheel — so installing ddocs also provides pandoc (no apt, no runtime
     # download). The markdown-to-latex step puts the bundled binary on PATH via
