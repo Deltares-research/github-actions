@@ -81,7 +81,7 @@ runs:
     - name: Define constants
       shell: bash
       run: |
-        echo "DDOCS_REPO=git+https://github.com/Deltares-research/doc_utils.git@2e7c45171474f0de95829bd7209b05cee1f292a0" >> "$GITHUB_ENV"
+        echo "DDOCS_REPO=git+https://github.com/Deltares-research/doc_utils.git@d8a78c824dd77016905609cdf3def8849ff4b71c" >> "$GITHUB_ENV"
 
     - name: Set up Python
       uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
@@ -139,23 +139,15 @@ runs:
           --output "$LATEX_OUTPUT_DIR"
         echo "::endgroup::"
 
-    # Install pdflatex via apt. ddocs' check-pdflatex (TinyTeX) works but is slow
-    # — it downloads the TeX toolchain at runtime — so apt's prebuilt texlive
-    # packages are the faster, reliable backend on CI.
+    # Install pdflatex via ddocs with the apt backend: ddocs runs
+    # `apt-get install` for the texlive-* set (fast prebuilt debs), system-wide,
+    # so pdflatex is on PATH for the compile step below — no $GITHUB_PATH needed.
     - name: Install LaTeX
       if: inputs.tex-files != ''
       shell: bash
       run: |
-        echo "::group::Installing LaTeX Packages"
-        sudo apt-get update
-        sudo apt-get install -y \
-          texlive-latex-base \
-          texlive-latex-extra \
-          texlive-fonts-recommended \
-          texlive-fonts-extra \
-          texlive-bibtex-extra \
-          texlive-science biber
-
+        echo "::group::Installing pdflatex via ddocs (apt backend)"
+        ddocs pdflatex download --backend apt
         pdflatex --version
         echo "::endgroup::"
 
