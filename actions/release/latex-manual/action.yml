@@ -227,13 +227,9 @@ runs:
         RELEASE_TAG_INPUT: ${{ inputs.release-tag }}
         RELEASE_EVENT_TAG: ${{ github.event.release.tag_name }}
       run: |
-        if [ -n "$RELEASE_TAG_INPUT" ]; then
-          tag="$RELEASE_TAG_INPUT"
-        else
-          tag="$RELEASE_EVENT_TAG"
-        fi
+        tag=$(bash "$GITHUB_ACTION_PATH/scripts/resolve-release-tag.sh" "$RELEASE_TAG_INPUT" "$RELEASE_EVENT_TAG")
         echo "tag=$tag" >> "$GITHUB_OUTPUT"
-        echo "Uploading PDFs to release tag: $tag"
+        echo "Resolved release tag: $tag"
 
     - name: Upload PDFs to Release
       if: inputs.tex-files != '' && inputs.upload-to-release == 'true' && inputs.github-token != '' && steps.get_tag.outputs.tag != ''

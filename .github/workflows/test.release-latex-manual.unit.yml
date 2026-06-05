@@ -79,6 +79,36 @@ jobs:
           fi
 
   # =====================================================================
+  # TIER 0 — UNIT: pure-shell helpers, no action execution (fast)
+  # =====================================================================
+
+  # Unit-test the release-tag resolution script the action uses, so the
+  # input-wins-else-event precedence is verified without a full compile.
+  resolve-release-tag-unit:
+    name: unit — resolve-release-tag.sh
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: explicit release-tag input wins over the event tag
+        run: |
+          out=$(bash actions/release/latex-manual/scripts/resolve-release-tag.sh "v9.9.9" "v1.0.0")
+          [ "$out" = "v9.9.9" ] || { echo "::error::expected v9.9.9, got '$out'"; exit 1; }
+      - name: falls back to the event tag when the input is empty
+        run: |
+          out=$(bash actions/release/latex-manual/scripts/resolve-release-tag.sh "" "v1.0.0")
+          [ "$out" = "v1.0.0" ] || { echo "::error::expected v1.0.0, got '$out'"; exit 1; }
+      - name: empty when both are empty
+        run: |
+          out=$(bash actions/release/latex-manual/scripts/resolve-release-tag.sh "" "")
+          [ -z "$out" ] || { echo "::error::expected empty, got '$out'"; exit 1; }
+      - name: wrong argument count fails (exit 2)
+        run: |
+          if bash actions/release/latex-manual/scripts/resolve-release-tag.sh "only-one"; then
+            echo "::error::should have failed with a single argument"; exit 1
+          fi
+          echo "usage guard OK"
+
+  # =====================================================================
   # TIER 1 — STATIC: action.yml contract (no action execution)
   # =====================================================================
   action-yaml-structure:
@@ -201,6 +231,10 @@ jobs:
           UPLOAD_COND=$(yq eval '.runs.steps[] | select(.name == "Upload PDFs to Release") | .if' "$ACTION")
           echo "$UPLOAD_COND" | grep -q "steps.get_tag.outputs.tag != ''" \
             || { echo "::error::Upload PDFs to Release not gated on the release tag output"; exit 1; }
+          # Get Release Tag must resolve the tag via the (unit-tested) script.
+          TAG_RUN=$(yq eval '.runs.steps[] | select(.name == "Get Release Tag") | .run' "$ACTION")
+          echo "$TAG_RUN" | grep -q 'scripts/resolve-release-tag.sh' \
+            || { echo "::error::Get Release Tag must call scripts/resolve-release-tag.sh"; exit 1; }
           echo "steps + gating OK"
 
       - name: Verify artifact step + ddocs constant + SHA-pinned actions
@@ -489,3 +523,60 @@ jobs:
               exit 1
             }
           done
+
+  # Exercises the release-upload path end to end: create a throwaway prerelease,
+  # run the action with release-tag + github-token so it compiles AND attaches
+  # the PDFs, assert the assets landed, then delete the release. workflow_dispatch
+  # only — it mutates the repo's releases and needs contents:write.
+  e2e-release-upload:
+    name: e2e — attach PDFs to a release (workflow_dispatch only)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create throwaway prerelease
+        id: rel
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="ci-latex-manual-${{ github.run_id }}-${{ github.run_attempt }}"
+          gh release create "$tag" --prerelease --target "${{ github.sha }}" \
+            --title "CI latex-manual upload test ($tag)" \
+            --notes "Temporary release for the latex-manual e2e upload test. Safe to delete."
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Stage fixture
+        run: |
+          mkdir -p docs/mkdocs/user_docs docs/end-user-docs/source
+          cp $MD_INPUT/index.md docs/mkdocs/user_docs/index.md
+          cp tests/data/release-latex-manual/end-to-end/sample.tex  docs/end-user-docs/source/sample.tex
+          cp tests/data/release-latex-manual/end-to-end/sample2.tex docs/end-user-docs/source/sample2.tex
+          cp tests/data/release-latex-manual/end-to-end/refs.bib    docs/end-user-docs/source/refs.bib
+
+      - name: Run action with release-tag (compile + attach to the release)
+        uses: ./actions/release/latex-manual
+        with:
+          tex-files: 'sample,sample2'
+          latex-template-token: ${{ env.FAKE_TOKEN }}
+          release-tag: ${{ steps.rel.outputs.tag }}
+          upload-to-release: 'true'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify both PDFs are attached to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          names=$(gh release view "${{ steps.rel.outputs.tag }}" --json assets --jq '.assets[].name')
+          echo "Attached assets:"; echo "$names"
+          for f in sample.pdf sample2.pdf; do
+            echo "$names" | grep -qx "$f" || { echo "::error::$f not attached to the release"; exit 1; }
+          done
+
+      - name: Cleanup throwaway release
+        if: always() && steps.rel.outputs.tag != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release delete "${{ steps.rel.outputs.tag }}" --yes --cleanup-tag || true
