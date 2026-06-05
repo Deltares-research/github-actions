@@ -75,13 +75,13 @@ runs:
 
     # Action-wide constants. Composite actions have no top-level `env:`, so we
     # publish them to $GITHUB_ENV in the first step and reference $VAR below.
-    # DDOCS_REPO: pip target for the ddocs CLI, pinned to a commit SHA for
-    # reproducibility — bump the SHA after the `@` to upgrade ddocs. This is the
-    # single source of truth.
+    # DDOCS_REPO: pip target for the ddocs CLI, pinned to the commit behind the
+    # doc_utils 0.2.0 release for reproducibility — bump the SHA (and the version
+    # comment) after the `@` to upgrade ddocs. This is the single source of truth.
     - name: Define constants
       shell: bash
       run: |
-        echo "DDOCS_REPO=git+https://github.com/Deltares-research/doc_utils.git@fb269f0bdc004385a98cd5163baa651a6ee2052c" >> "$GITHUB_ENV"
+        echo "DDOCS_REPO=git+https://github.com/Deltares-research/doc_utils.git@354afe0af29ad98a4a2506da7483bc0c96d4ac16" >> "$GITHUB_ENV"  # 0.2.0
 
     - name: Set up Python
       uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
