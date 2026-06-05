@@ -70,12 +70,16 @@ jobs:
             exit 0
           fi
           git fetch --no-tags --depth=1 origin "$BASE_SHA" 2>/dev/null || true
-          if git diff --name-only "$BASE_SHA" "$HEAD_SHA" | grep -q '^actions/release/latex-manual/'; then
+          # Three-dot diff = changes since the merge-base (the PR's own changes),
+          # so an unrelated change on the base branch does not over-trigger e2e.
+          # Run e2e when the action, its e2e fixtures, or this workflow changed.
+          if git diff --name-only "$BASE_SHA...$HEAD_SHA" \
+               | grep -qE '^(actions/release/latex-manual/|tests/data/release-latex-manual/|\.github/workflows/test\.release-latex-manual\.unit\.yml$)'; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
-            echo "actions/release/latex-manual/ changed in this PR -> e2e will run"
+            echo "latex-manual action/fixtures/workflow changed in this PR -> e2e will run"
           else
             echo "changed=false" >> "$GITHUB_OUTPUT"
-            echo "actions/release/latex-manual/ unchanged -> e2e skipped"
+            echo "no latex-manual changes in this PR -> e2e skipped"
           fi
 
   # =====================================================================
@@ -276,6 +280,14 @@ jobs:
           mkdir -p docs/mkdocs/user_docs docs/end-user-docs/source
           cp $MD_INPUT/index.md docs/mkdocs/user_docs/index.md
 
+      # Record whether pdflatex pre-exists on the runner image, so the
+      # post-action check can tell "the action installed TeX Live" apart from
+      # "the image already shipped it" (robust to future runner images).
+      - name: Record pre-existing pdflatex
+        id: pre
+        run: |
+          if command -v pdflatex >/dev/null; then echo "had=true" >> "$GITHUB_OUTPUT"; else echo "had=false" >> "$GITHUB_OUTPUT"; fi
+
       - name: Run action
         # Invalid token → style fetch fails and the action continues via its
         # graceful warning path. Exercised on every run.
@@ -296,11 +308,14 @@ jobs:
 
       - name: Verify pdflatex/TeX Live did NOT run (tex-files empty)
         run: |
+          # Compile must not have run (no .aux artifacts).
           if compgen -G "docs/end-user-docs/source/*.aux" > /dev/null; then
             echo "::error::found .aux files — pdflatex ran when it shouldn't have"; exit 1
           fi
-          if command -v pdflatex >/dev/null; then
-            echo "::error::pdflatex installed — texlive install ran when it shouldn't have"; exit 1
+          # The action must not have INSTALLED TeX Live; ignore a pdflatex that
+          # was already on the image before the action ran.
+          if [ "${{ steps.pre.outputs.had }}" = "false" ] && command -v pdflatex >/dev/null; then
+            echo "::error::pdflatex appeared — the action installed TeX Live when it shouldn't have"; exit 1
           fi
 
   # Default python-version (no input) resolves to 3.12.

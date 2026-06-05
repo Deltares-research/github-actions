@@ -70,7 +70,7 @@ runs:
       if: inputs.latex-template-token == ''
       shell: bash
       run: |
-        echo "::error::latex-template-token is empty. Provide a token with read access to Deltares/LatexInstallation (e.g. a repository secret)."
+        echo "::error::latex-template-token input is empty. Pass a token with read access to Deltares/LatexInstallation (typically wired from a repository or organization secret)."
         exit 1
 
     # Action-wide constants. Composite actions have no top-level `env:`, so we
@@ -142,13 +142,17 @@ runs:
     # Install pdflatex via ddocs with the apt backend: ddocs runs
     # `apt-get install` for the texlive-* set (fast prebuilt debs), system-wide,
     # so pdflatex is on PATH for the compile step below — no $GITHUB_PATH needed.
+    # ddocs' apt set omits biber, so install it too for biblatex+biber documents
+    # (the compile loop uses bibtex, but consumers may need biber).
     - name: Install LaTeX
       if: inputs.tex-files != ''
       shell: bash
       run: |
         echo "::group::Installing pdflatex via ddocs (apt backend)"
         ddocs pdflatex download --backend apt
+        sudo apt-get install -y biber
         pdflatex --version
+        biber --version | head -1
         echo "::endgroup::"
 
     - name: Compile PDF Documents
