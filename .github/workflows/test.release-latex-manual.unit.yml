@@ -247,9 +247,11 @@ jobs:
           # Artifact name is the stable contract consumers download by.
           NAME=$(yq eval '.runs.steps[] | select(.name == "Upload PDF Artifacts") | .with.name' "$ACTION")
           test "$NAME" = "LaTeX-Documentation" || { echo "::error::artifact name changed: $NAME"; exit 1; }
-          # DDOCS_REPO constant is the single source of truth for the ddocs pin.
-          grep -q 'DDOCS_REPO=git+https://github.com/Deltares-research/doc_utils.git@' "$ACTION" \
-            || { echo "::error::DDOCS_REPO constant missing or repo URL changed"; exit 1; }
+          # DDOCS_REPO constant is the single source of truth for the ddocs pin
+          # (pinned to a 40-hex commit). Quote-agnostic so the constant can be a
+          # plain assignment or a shell variable.
+          grep -Eq 'DDOCS_REPO=.?git\+https://github.com/Deltares-research/doc_utils\.git@[0-9a-f]{40}' "$ACTION" \
+            || { echo "::error::DDOCS_REPO constant missing or repo URL/pin changed"; exit 1; }
           test "$(grep -c 'doc_utils.git' "$ACTION")" = "1" \
             || { echo "::error::ddocs repo URL must appear exactly once (single source of truth)"; exit 1; }
           # Third-party actions must be SHA-pinned (40-hex) per repo convention.
