@@ -150,7 +150,7 @@ runs:
       uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
       with:
         path: ~/texlive-cache.tar
-        key: latex-manual-texlive-${{ runner.os }}-v1
+        key: latex-manual-texlive-${{ runner.os }}-v2
 
     # On a cache hit: restore the tarball (no apt, no download). On a miss:
     # install via ddocs' apt backend (+ biber, which its set omits) and pack the
@@ -164,24 +164,30 @@ runs:
       run: |
         set -euo pipefail
         CACHE_FILE="$HOME/texlive-cache.tar"
+        list_installed() {
+          dpkg-query -W -f='${Package}\t${Status}\n' 2>/dev/null \
+            | awk -F'\t' '$2 == "install ok installed" { print $1 }' | sort -u
+        }
         if [ "$TEXLIVE_CACHE_HIT" = "true" ] && [ -f "$CACHE_FILE" ]; then
           echo "::group::Restoring TeX Live from cache"
           sudo tar -xpf "$CACHE_FILE" -C /
+          sudo ldconfig            # refresh the shared-library cache (libkpathsea, …)
           sudo mktexlsr            # refresh the ls-R filename databases
           echo "::endgroup::"
         else
           echo "::group::Installing pdflatex via ddocs (apt backend) + biber"
+          list_installed > /tmp/pkgs-before.txt
           ddocs pdflatex download --backend apt
           sudo apt-get install -y biber
+          list_installed > /tmp/pkgs-after.txt
           echo "::endgroup::"
           echo "::group::Packing TeX Live for the cache"
-          # Only INSTALLED texlive*/biber packages ('texlive*' also matches many
-          # known-but-uninstalled names, which would make dpkg -L fail under set -e).
-          mapfile -t pkgs < <(dpkg-query -W -f='${Package}\t${Status}\n' 'texlive*' biber 2>/dev/null \
-            | awk -F'\t' '$2 == "install ok installed" { print $1 }')
-          echo "Installed TeX packages: ${pkgs[*]}"
-          # Regular files owned by those packages (symlinks like pdflatex kept as
-          # symlinks), plus the generated format/ls-R trees under /var/lib/texmf.
+          # Pack EVERYTHING apt newly installed (texlive-* AND its library deps
+          # such as libkpathsea6/libptexenc1/libsynctex2 — the binaries fail to
+          # load without them), plus the generated format/ls-R trees in
+          # /var/lib/texmf. Diffing the package DB is more robust than globbing.
+          mapfile -t pkgs < <(comm -13 /tmp/pkgs-before.txt /tmp/pkgs-after.txt)
+          echo "Newly installed packages: ${pkgs[*]}"
           dpkg -L "${pkgs[@]}" | awk 'NF' | while IFS= read -r p; do
             [ -f "$p" ] && printf '%s\n' "$p"
           done > /tmp/texlive-files.txt
