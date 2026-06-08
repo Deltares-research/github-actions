@@ -150,7 +150,7 @@ runs:
       uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
       with:
         path: ~/texlive-cache.tar
-        key: latex-manual-texlive-${{ runner.os }}-v3
+        key: latex-manual-texlive-${{ runner.os }}-v4
 
     # On a cache hit: restore the tarball (no apt, no download). On a miss:
     # install via ddocs' apt backend (+ biber, which its set omits) and pack the
@@ -181,22 +181,30 @@ runs:
           sudo mktexlsr            # refresh the ls-R filename databases
           echo "::endgroup::"
         else
-          echo "::group::Installing pdflatex via ddocs (apt backend) + biber"
+          echo "::group::Installing pdflatex via ddocs (apt backend)"
           snapshot > /tmp/fs-before.txt
           ddocs pdflatex download --backend apt
-          sudo apt-get install -y biber
           snapshot > /tmp/fs-after.txt
           echo "::endgroup::"
           echo "::group::Packing TeX Live for the cache"
           # Pack every file/symlink the install ADDED in those dirs — captures
           # binaries, alternatives symlinks (e.g. /usr/bin/bibtex), shared libs,
           # texmf data, and generated formats, regardless of dpkg ownership.
+          # (biber is installed below and NOT packed — its large Perl dependency
+          # tree lives outside these dirs and is impractical to cache.)
           comm -13 /tmp/fs-before.txt /tmp/fs-after.txt > /tmp/texlive-files.txt
           echo "Packing $(wc -l < /tmp/texlive-files.txt) new files/symlinks"
           sudo tar -cpf "$CACHE_FILE" --no-recursion -T /tmp/texlive-files.txt
           sudo chown "$(id -u):$(id -g)" "$CACHE_FILE"
           echo "::endgroup::"
         fi
+        # biber pulls a large Perl dependency tree that is impractical to cache,
+        # and the compile loop uses bibtex (not biber); install it fresh each run
+        # so it stays available to biblatex+biber documents.
+        echo "::group::Installing biber"
+        sudo apt-get update
+        sudo apt-get install -y biber
+        echo "::endgroup::"
         pdflatex --version
         biber --version | head -1
 
