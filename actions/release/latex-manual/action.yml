@@ -78,10 +78,16 @@ runs:
     # DDOCS_REPO: pip target for the ddocs CLI, pinned to the commit behind the
     # doc_utils 0.2.0 release for reproducibility — bump the SHA (and the version
     # comment) after the `@` to upgrade ddocs. This is the single source of truth.
+    # DDOCS_KEY: short hash of that pin, used in the pip cache key so bumping
+    # ddocs (which may change deps) starts a fresh cache instead of freezing it.
     - name: Define constants
       shell: bash
       run: |
-        echo "DDOCS_REPO=git+https://github.com/Deltares-research/doc_utils.git@354afe0af29ad98a4a2506da7483bc0c96d4ac16" >> "$GITHUB_ENV"  # 0.2.0
+        DDOCS_REPO="git+https://github.com/Deltares-research/doc_utils.git@354afe0af29ad98a4a2506da7483bc0c96d4ac16"  # 0.2.0
+        {
+          echo "DDOCS_REPO=$DDOCS_REPO"
+          echo "DDOCS_KEY=$(printf '%s' "$DDOCS_REPO" | sha256sum | cut -c1-12)"
+        } >> "$GITHUB_ENV"
 
     - name: Set up Python
       uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
@@ -94,7 +100,9 @@ runs:
       uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
       with:
         path: ~/.cache/pip
-        key: latex-manual-pip-${{ runner.os }}-py${{ inputs.python-version }}
+        key: latex-manual-pip-${{ runner.os }}-py${{ inputs.python-version }}-${{ env.DDOCS_KEY }}
+        restore-keys: |
+          latex-manual-pip-${{ runner.os }}-py${{ inputs.python-version }}-
 
     # ddocs depends on pypandoc-binary, which bundles the pandoc executable in
     # the wheel — so installing ddocs also provides pandoc (no apt, no runtime
@@ -143,14 +151,16 @@ runs:
     # paths and generates format files, which actions/cache cannot restore
     # directly (it writes as the runner user). So we cache a single user-owned
     # tarball (created by the Install step on a miss) and sudo-extract it on a
-    # hit. Bump the `-vN` key suffix to force a rebuild after changing the package set.
+    # hit. The key includes the runner image family (ImageOS, e.g. "ubuntu24")
+    # so a major image bump — which changes the TeX Live version — invalidates
+    # the cache automatically. Bump the `-vN` suffix to force a rebuild otherwise.
     - name: Cache TeX Live
       if: inputs.tex-files != ''
       id: texlive-cache
       uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
       with:
         path: ~/texlive-cache.tar
-        key: latex-manual-texlive-${{ runner.os }}-v4
+        key: latex-manual-texlive-${{ runner.os }}-${{ env.ImageOS }}-v4
 
     # On a cache hit: restore the tarball (no apt, no download). On a miss:
     # install via ddocs' apt backend and pack the files the install added (a
@@ -175,11 +185,15 @@ runs:
         }
         if [ "$TEXLIVE_CACHE_HIT" = "true" ] && [ -f "$CACHE_FILE" ]; then
           echo "::group::Restoring TeX Live from cache"
-          sudo tar -xpf "$CACHE_FILE" -C /
+          # Restrict extraction to the TeX prefixes the pack writes, so a
+          # corrupted/poisoned cache can't drop files elsewhere under / (the
+          # pack stores members relative: usr/…, etc/…, var/…).
+          sudo tar -xpf "$CACHE_FILE" -C / usr etc var
           sudo ldconfig            # refresh the shared-library cache (libkpathsea, …)
           sudo mktexlsr            # refresh the ls-R filename databases
           echo "::endgroup::"
         else
+          echo "::notice::TeX Live cache miss — installing from scratch (~2-3 min); the cache will be populated for next time."
           echo "::group::Installing pdflatex via ddocs (apt backend)"
           snapshot > /tmp/fs-before.txt
           ddocs pdflatex download --backend apt
