@@ -175,7 +175,11 @@ runs:
           sudo apt-get install -y biber
           echo "::endgroup::"
           echo "::group::Packing TeX Live for the cache"
-          mapfile -t pkgs < <(dpkg-query -W -f='${Package}\n' 'texlive*' biber)
+          # Only INSTALLED texlive*/biber packages ('texlive*' also matches many
+          # known-but-uninstalled names, which would make dpkg -L fail under set -e).
+          mapfile -t pkgs < <(dpkg-query -W -f='${Package}\t${Status}\n' 'texlive*' biber 2>/dev/null \
+            | awk -F'\t' '$2 == "install ok installed" { print $1 }')
+          echo "Installed TeX packages: ${pkgs[*]}"
           # Regular files owned by those packages (symlinks like pdflatex kept as
           # symlinks), plus the generated format/ls-R trees under /var/lib/texmf.
           dpkg -L "${pkgs[@]}" | awk 'NF' | while IFS= read -r p; do
