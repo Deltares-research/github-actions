@@ -143,7 +143,7 @@ runs:
     # paths and generates format files, which actions/cache cannot restore
     # directly (it writes as the runner user). So we cache a single user-owned
     # tarball (created by the Install step on a miss) and sudo-extract it on a
-    # hit. Bump the `-v1` suffix to force a rebuild after changing the package set.
+    # hit. Bump the `-vN` key suffix to force a rebuild after changing the package set.
     - name: Cache TeX Live
       if: inputs.tex-files != ''
       id: texlive-cache
@@ -153,9 +153,8 @@ runs:
         key: latex-manual-texlive-${{ runner.os }}-v4
 
     # On a cache hit: restore the tarball (no apt, no download). On a miss:
-    # install via ddocs' apt backend (+ biber, which its set omits) and pack the
-    # installed files — those owned by the texlive*/biber packages plus the
-    # generated trees under /var/lib/texmf — so the next run can skip all of it.
+    # install via ddocs' apt backend and pack the files the install added (a
+    # before/after filesystem diff) — so the next run can skip all of it.
     - name: Install LaTeX
       if: inputs.tex-files != ''
       shell: bash
@@ -190,23 +189,13 @@ runs:
           # Pack every file/symlink the install ADDED in those dirs — captures
           # binaries, alternatives symlinks (e.g. /usr/bin/bibtex), shared libs,
           # texmf data, and generated formats, regardless of dpkg ownership.
-          # (biber is installed below and NOT packed — its large Perl dependency
-          # tree lives outside these dirs and is impractical to cache.)
           comm -13 /tmp/fs-before.txt /tmp/fs-after.txt > /tmp/texlive-files.txt
           echo "Packing $(wc -l < /tmp/texlive-files.txt) new files/symlinks"
           sudo tar -cpf "$CACHE_FILE" --no-recursion -T /tmp/texlive-files.txt
           sudo chown "$(id -u):$(id -g)" "$CACHE_FILE"
           echo "::endgroup::"
         fi
-        # biber pulls a large Perl dependency tree that is impractical to cache,
-        # and the compile loop uses bibtex (not biber); install it fresh each run
-        # so it stays available to biblatex+biber documents.
-        echo "::group::Installing biber"
-        sudo apt-get update
-        sudo apt-get install -y biber
-        echo "::endgroup::"
         pdflatex --version
-        biber --version | head -1
 
     - name: Compile PDF Documents
       if: inputs.tex-files != ''
