@@ -24,9 +24,17 @@ Stand-alone composite action for deploying MkDocs documentation with `mike` vers
 [📖 Full Documentation](actions/mkdocs-deploy/README.md)
 
 ### 📄 LaTeX Documentation (`actions/release/latex-manual/`)
-Complete workflow for generating LaTeX/PDF documentation from Markdown using Deltares styles.
+Self-contained pipeline for building Deltares LaTeX/PDF manuals via the [`ddocs`](https://github.com/Deltares-research/doc_utils)
+CLI. Installs its own Python + ddocs (pandoc bundled), fetches the Deltares LaTeX styles from the internal
+`Deltares/LatexInstallation` repo, optionally converts Markdown to LaTeX, and compiles the PDFs — with the
+TeX Live install cached across runs.
 
-- **`actions/release/latex-manual`** — Setup environment, fetch Deltares styles, convert Markdown to LaTeX, compile PDFs
+- **`actions/release/latex-manual`** — fetch Deltares styles (`ddocs get-tex-template`), optionally convert
+  Markdown → LaTeX, install + cache TeX Live, compile PDFs, upload artifacts, and (optionally) attach the PDFs
+  to a GitHub release
+- Requires a `latex-template-token` (read access to `Deltares/LatexInstallation`); fails fast if it is empty
+- Set `markdown-input-dir: ''` to skip conversion for repos that author LaTeX directly; set `tex-files` to the
+  documents to compile; set `release-tag` to attach to an existing release (e.g. from a `workflow_run`)
 
 [📖 Full Documentation](actions/release/latex-manual/README.md)
 
@@ -80,7 +88,7 @@ release.
 | `actions/python-setup/pixi`    | `pixi/v1.0.1`           | `d60c8767cd8efb9c42850eabac6845cbe015d772` |
 | `actions/mkdocs-deploy`        | `mkdocs-deploy/v1.0.1`¹ | `b655376b4a9c0b0b37f7f730f840f11c7220d1a6` |
 | `actions/release/github`       | `github-release/v1.1.4` | `73618deb1feaffe481d69063ce7bf229fab6598b` |
-| `actions/release/latex-manual` | _unreleased_²           | —                                          |
+| `actions/release/latex-manual` | `latex/v1.0.0`          | `b145fdb7af62c9a3c204af3450c3aeb52f2754cf` |
 
 Pin in a consumer workflow by appending the SHA and keeping the version in a trailing comment:
 
@@ -90,7 +98,6 @@ Pin in a consumer workflow by appending the SHA and keeping the version in a tra
 
 ¹ Published tags use the `mkdocs-deploy/*` prefix, not the `mkdocs` namespace listed in the registry above.
   Pin against `mkdocs-deploy/*` until the namespaces are reconciled.
-² No release tags cut yet — consume via `@main` until the first `latex/*` tag is published.
 
 > Legacy duplicate tags from early tagging also exist (`python-setup/<pm>/*`, `release/github/*`). Prefer the
 > short namespaces in the table above. To regenerate this table, resolve each namespace's newest
