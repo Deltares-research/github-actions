@@ -139,21 +139,54 @@ runs:
           --output "$LATEX_OUTPUT_DIR"
         echo "::endgroup::"
 
-    # Install pdflatex via ddocs with the apt backend: ddocs runs
-    # `apt-get install` for the texlive-* set (fast prebuilt debs), system-wide,
-    # so pdflatex is on PATH for the compile step below — no $GITHUB_PATH needed.
-    # ddocs' apt set omits biber, so install it too for biblatex+biber documents
-    # (the compile loop uses bibtex, but consumers may need biber).
+    # Cache the *installed* TeX Live tree. apt installs into root-owned system
+    # paths and generates format files, which actions/cache cannot restore
+    # directly (it writes as the runner user). So we cache a single user-owned
+    # tarball (created by the Install step on a miss) and sudo-extract it on a
+    # hit. Bump the `-v1` suffix to force a rebuild after changing the package set.
+    - name: Cache TeX Live
+      if: inputs.tex-files != ''
+      id: texlive-cache
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      with:
+        path: ~/texlive-cache.tar
+        key: latex-manual-texlive-${{ runner.os }}-v1
+
+    # On a cache hit: restore the tarball (no apt, no download). On a miss:
+    # install via ddocs' apt backend (+ biber, which its set omits) and pack the
+    # installed files — those owned by the texlive*/biber packages plus the
+    # generated trees under /var/lib/texmf — so the next run can skip all of it.
     - name: Install LaTeX
       if: inputs.tex-files != ''
       shell: bash
+      env:
+        TEXLIVE_CACHE_HIT: ${{ steps.texlive-cache.outputs.cache-hit }}
       run: |
-        echo "::group::Installing pdflatex via ddocs (apt backend)"
-        ddocs pdflatex download --backend apt
-        sudo apt-get install -y biber
+        set -euo pipefail
+        CACHE_FILE="$HOME/texlive-cache.tar"
+        if [ "$TEXLIVE_CACHE_HIT" = "true" ] && [ -f "$CACHE_FILE" ]; then
+          echo "::group::Restoring TeX Live from cache"
+          sudo tar -xpf "$CACHE_FILE" -C /
+          sudo mktexlsr            # refresh the ls-R filename databases
+          echo "::endgroup::"
+        else
+          echo "::group::Installing pdflatex via ddocs (apt backend) + biber"
+          ddocs pdflatex download --backend apt
+          sudo apt-get install -y biber
+          echo "::endgroup::"
+          echo "::group::Packing TeX Live for the cache"
+          mapfile -t pkgs < <(dpkg-query -W -f='${Package}\n' 'texlive*' biber)
+          # Regular files owned by those packages (symlinks like pdflatex kept as
+          # symlinks), plus the generated format/ls-R trees under /var/lib/texmf.
+          dpkg -L "${pkgs[@]}" | awk 'NF' | while IFS= read -r p; do
+            [ -f "$p" ] && printf '%s\n' "$p"
+          done > /tmp/texlive-files.txt
+          sudo tar -cpf "$CACHE_FILE" -T /tmp/texlive-files.txt /var/lib/texmf
+          sudo chown "$(id -u):$(id -g)" "$CACHE_FILE"
+          echo "::endgroup::"
+        fi
         pdflatex --version
         biber --version | head -1
-        echo "::endgroup::"
 
     - name: Compile PDF Documents
       if: inputs.tex-files != ''
