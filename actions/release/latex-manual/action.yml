@@ -80,6 +80,9 @@ runs:
     # comment) after the `@` to upgrade ddocs. This is the single source of truth.
     # DDOCS_KEY: short hash of that pin, used in the pip cache key so bumping
     # ddocs (which may change deps) starts a fresh cache instead of freezing it.
+    # TEXLIVE_IMAGE: the runner image family (e.g. "ubuntu24"), used in the
+    # TeX Live cache key so a major image bump invalidates it. $ImageOS is a
+    # runner env var (not exposed to ${{ env.* }}), so publish it here.
     - name: Define constants
       shell: bash
       run: |
@@ -87,6 +90,7 @@ runs:
         {
           echo "DDOCS_REPO=$DDOCS_REPO"
           echo "DDOCS_KEY=$(printf '%s' "$DDOCS_REPO" | sha256sum | cut -c1-12)"
+          echo "TEXLIVE_IMAGE=${ImageOS:-$RUNNER_OS}"
         } >> "$GITHUB_ENV"
 
     - name: Set up Python
@@ -160,7 +164,7 @@ runs:
       uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
       with:
         path: ~/texlive-cache.tar
-        key: latex-manual-texlive-${{ runner.os }}-${{ env.ImageOS }}-v4
+        key: latex-manual-texlive-${{ env.TEXLIVE_IMAGE }}-v4
 
     # On a cache hit: restore the tarball (no apt, no download). On a miss:
     # install via ddocs' apt backend and pack the files the install added (a
