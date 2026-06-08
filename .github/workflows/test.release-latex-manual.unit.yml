@@ -2,26 +2,33 @@ name: release/latex-manual - unit
 
 # Tests for actions/release/latex-manual.
 #
-# Strategy
-# --------
-# The action is self-contained — it installs its own Python, ddocs, pandoc,
-# subversion, and (when compiling PDFs) TeX Live. It does not interact with
-# the consumer's pyproject or virtualenv, so tests don't need the per-PM
-# fixture matrix used elsewhere in this repo.
+# Test tiers
+# ----------
+#   1. Static  (action-yaml-*)   — yq assertions on the action contract. No
+#      action run; fast; always on push/PR.
+#   2. Behavioral (lightweight)  — run the action with tex-files='' so neither
+#      TeX Live nor pdflatex install. Each job isolates one input/behavior:
+#      default python, pinned python, custom dirs, multi-file conversion,
+#      graceful style-fetch failure, and the required-token guard. ~1 min each.
+#   3. End-to-end (heavy)        — tex-files set, so TeX Live installs via apt
+#      (~5 min) and pdflatex runs. Covers the compile loop, bibtex branch,
+#      whitespace trimming, and artifact upload/download. Runs on
+#      workflow_dispatch, or on a pull_request ONLY when
+#      actions/release/latex-manual/ changed (the `detect-changes` job decides),
+#      so unrelated PRs aren't taxed ~5 min.
 #
-# Two external dependencies are handled as follows:
-#   * SVN: every job passes bogus credentials. The action's "Checkout
-#     Deltares LaTeX Styles" step has a graceful failure path that emits a
-#     `::warning::` and exits 0, which lets the rest of the action run. So
-#     all jobs implicitly verify that path stays wired up.
-#   * texlive + pdflatex: the action gates these on `tex-files != ''`. The
-#     unit job leaves `tex-files` empty (the default), skipping both the
-#     ~5-minute apt install and pdflatex. The `pdf-compile-end-to-end` job
-#     exercises the heavy path on `workflow_dispatch` only.
-#
-# The `ddocs` CLI (https://github.com/Deltares-research/doc_utils) is
-# installed from git by the action — tests just let that happen and assert
-# the markdown-to-latex step produced output.
+# External dependencies
+#   * Deltares styles: the action runs `ddocs get-tex-template` against the
+#     internal Deltares/LatexInstallation repo. latex-template-token is now
+#     required (the action fails fast if empty), so tests pass a deliberately
+#     invalid FAKE_TOKEN: it satisfies the required-token guard, then the fetch
+#     fails and the action's graceful path emits a `::warning::` and continues.
+#     Every behavioral job thus proves the fetch failure does not abort the
+#     pipeline. The required-token guard itself is covered by a dedicated job.
+#   * ddocs + pandoc: the action pip-installs ddocs from git; ddocs depends on
+#     pypandoc-binary, which bundles the pandoc executable in the wheel, so no
+#     apt install or runtime download is needed. Tests let that happen and
+#     assert on the produced .tex (which proves the bundled pandoc works).
 
 on:
   push:
@@ -30,15 +37,84 @@ on:
 
 env:
   MD_INPUT: tests/data/release-latex-manual/markdown
-  # Bogus SVN creds — the action gracefully continues on auth failure.
-  SVN_USERNAME: nobody
-  SVN_PASSWORD: nopass
-  SVN_REPO_URL: https://invalid.invalid/svn
+  MD_MULTI: tests/data/release-latex-manual/markdown-multi
+  # Non-empty but invalid token: passes the required-token guard, then the
+  # style fetch fails and the action continues via its graceful path.
+  FAKE_TOKEN: ghp_fakeInvalidTokenForTests00000000000000
 
 jobs:
   # ---------------------------------------------------------------------
-  # Structural sanity: action.yml has the inputs and steps we depend on.
+  # Decide whether the heavy e2e tier should run on this event. It runs
+  # when the composite action changed in a PR (diff base..head touches
+  # actions/release/latex-manual/). On push the output is false; e2e then
+  # only runs via workflow_dispatch.
   # ---------------------------------------------------------------------
+  detect-changes:
+    name: detect action changes
+    runs-on: ubuntu-latest
+    outputs:
+      action-changed: ${{ steps.diff.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # need base + head to diff a PR
+
+      - id: diff
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "not a pull_request; e2e gated to workflow_dispatch only"
+            exit 0
+          fi
+          git fetch --no-tags --depth=1 origin "$BASE_SHA" 2>/dev/null || true
+          # Three-dot diff = changes since the merge-base (the PR's own changes),
+          # so an unrelated change on the base branch does not over-trigger e2e.
+          # Run e2e when the action, its e2e fixtures, or this workflow changed.
+          if git diff --name-only "$BASE_SHA...$HEAD_SHA" \
+               | grep -qE '^(actions/release/latex-manual/|tests/data/release-latex-manual/|\.github/workflows/test\.release-latex-manual\.unit\.yml$)'; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "latex-manual action/fixtures/workflow changed in this PR -> e2e will run"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "no latex-manual changes in this PR -> e2e skipped"
+          fi
+
+  # =====================================================================
+  # TIER 0 — UNIT: pure-shell helpers, no action execution (fast)
+  # =====================================================================
+
+  # Unit-test the release-tag resolution script the action uses, so the
+  # input-wins-else-event precedence is verified without a full compile.
+  resolve-release-tag-unit:
+    name: unit — resolve-release-tag.sh
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: explicit release-tag input wins over the event tag
+        run: |
+          out=$(bash actions/release/latex-manual/scripts/resolve-release-tag.sh "v9.9.9" "v1.0.0")
+          [ "$out" = "v9.9.9" ] || { echo "::error::expected v9.9.9, got '$out'"; exit 1; }
+      - name: falls back to the event tag when the input is empty
+        run: |
+          out=$(bash actions/release/latex-manual/scripts/resolve-release-tag.sh "" "v1.0.0")
+          [ "$out" = "v1.0.0" ] || { echo "::error::expected v1.0.0, got '$out'"; exit 1; }
+      - name: empty when both are empty
+        run: |
+          out=$(bash actions/release/latex-manual/scripts/resolve-release-tag.sh "" "")
+          [ -z "$out" ] || { echo "::error::expected empty, got '$out'"; exit 1; }
+      - name: wrong argument count fails (exit 2)
+        run: |
+          if bash actions/release/latex-manual/scripts/resolve-release-tag.sh "only-one"; then
+            echo "::error::should have failed with a single argument"; exit 1
+          fi
+          echo "usage guard OK"
+
+  # =====================================================================
+  # TIER 1 — STATIC: action.yml contract (no action execution)
+  # =====================================================================
   action-yaml-structure:
     name: action.yml structural sanity
     runs-on: ubuntu-latest
@@ -48,7 +124,7 @@ jobs:
       - name: Install yq
         run: sudo snap install yq || sudo apt-get install -y yq
 
-      - name: Verify action.yml shape
+      - name: Verify top-level shape + inputs exist
         run: |
           ACTION=actions/release/latex-manual/action.yml
           for key in name description inputs runs; do
@@ -60,61 +136,78 @@ jobs:
           # Every input the action contract advertises must exist.
           for input in python-version tex-files \
                        markdown-input-dir latex-output-dir \
-                       svn-username svn-password svn-repo-url \
-                       upload-to-release github-token; do
+                       latex-template-token upload-to-release release-tag github-token; do
             if [ "$(yq eval ".inputs.\"$input\"" "$ACTION")" = "null" ]; then
               echo "::error::action.yml is missing input '$input'"
               exit 1
             fi
           done
-          # Inputs explicitly removed in the slim refactor — guard against
-          # accidental reintroduction (no PM coupling, ddocs is hardcoded
-          # to the upstream git URL, artifact upload always fires when
-          # there are PDFs).
-          for unwanted in package-manager dependency-groups install-extras \
-                          poetry-extras pixi-environments \
-                          pixi-activate-environment verify-lock ddocs-source \
-                          upload-artifacts artifact-name artifact-retention-days; do
-            if [ "$(yq eval ".inputs.\"$unwanted\"" "$ACTION")" != "null" ]; then
-              echo "::error::action.yml must NOT have input '$unwanted' (slim refactor removed it)"
-              exit 1
-            fi
-          done
-          # SVN creds must remain required — silently using empty strings
-          # would mask credential-passing bugs in consumers.
-          for input in svn-username svn-password svn-repo-url; do
-            REQ=$(yq eval ".inputs.\"$input\".required" "$ACTION")
-            if [ "$REQ" != "true" ]; then
-              echo "::error::input '$input' must be required, got: $REQ"
-              exit 1
-            fi
-          done
-          # tex-files must NOT be required — empty means "skip pdflatex".
-          REQ=$(yq eval '.inputs."tex-files".required' "$ACTION")
-          if [ "$REQ" = "true" ]; then
-            echo "::error::tex-files must not be required (empty = skip pdflatex)"
-            exit 1
-          fi
           USING=$(yq eval ".runs.using" "$ACTION")
           if [ "$USING" != "composite" ]; then
             echo "::error::action.runs.using must be 'composite', got: $USING"
             exit 1
           fi
+          echo "shape + inputs OK"
+
+      - name: Verify removed inputs stay removed
+        run: |
+          ACTION=actions/release/latex-manual/action.yml
+          # Guard against accidental reintroduction. No PM coupling; ddocs is
+          # hardcoded to the upstream git URL; artifact upload always fires
+          # when there are PDFs; SVN inputs were replaced by get-tex-template.
+          for unwanted in package-manager dependency-groups install-extras \
+                          poetry-extras pixi-environments \
+                          pixi-activate-environment verify-lock ddocs-source \
+                          upload-artifacts artifact-name artifact-retention-days \
+                          svn-username svn-password svn-repo-url; do
+            if [ "$(yq eval ".inputs.\"$unwanted\"" "$ACTION")" != "null" ]; then
+              echo "::error::action.yml must NOT have input '$unwanted' (removed in a refactor)"
+              exit 1
+            fi
+          done
+          echo "removed-input guard OK"
+
+      - name: Verify input requiredness + defaults
+        run: |
+          ACTION=actions/release/latex-manual/action.yml
+          # tex-files must stay optional (its empty default skips pdflatex).
+          if [ "$(yq eval '.inputs."tex-files".required' "$ACTION")" = "true" ]; then
+            echo "::error::input 'tex-files' must not be required"
+            exit 1
+          fi
+          # latex-template-token must be required (the styles fetch needs it;
+          # the action fails fast when it is empty).
+          if [ "$(yq eval '.inputs."latex-template-token".required' "$ACTION")" != "true" ]; then
+            echo "::error::input 'latex-template-token' must be required"
+            exit 1
+          fi
+          # Default dirs the consumers rely on must not silently change.
+          test "$(yq eval '.inputs."markdown-input-dir".default' "$ACTION")" = "docs/mkdocs/user_docs" \
+            || { echo "::error::markdown-input-dir default drifted"; exit 1; }
+          test "$(yq eval '.inputs."latex-output-dir".default' "$ACTION")" = "docs/end-user-docs/source" \
+            || { echo "::error::latex-output-dir default drifted"; exit 1; }
+          test "$(yq eval '.inputs."python-version".default' "$ACTION")" = "3.12" \
+            || { echo "::error::python-version default drifted"; exit 1; }
+          echo "requiredness + defaults OK"
+
+      - name: Verify steps exist + pdflatex gating
+        run: |
+          ACTION=actions/release/latex-manual/action.yml
           STEPS=$(yq eval ".runs.steps[].name" "$ACTION")
-          for expected in "Install System Dependencies" "Set up Python" "Install ddocs" \
-                          "Checkout Deltares LaTeX Styles" "Generate LaTeX from Markdown" \
+          for expected in "Require latex-template-token" "Define constants" "Set up Python" "Install ddocs" \
+                          "Fetch Deltares LaTeX Styles" "Generate LaTeX from Markdown" \
                           "Install LaTeX" "Compile PDF Documents" \
-                          "Upload PDF Artifacts" "Upload PDFs to Release"; do
+                          "Upload PDF Artifacts" "Get Release Tag" "Upload PDFs to Release"; do
             if ! echo "$STEPS" | grep -Fxq "$expected"; then
               echo "::error::action.yml is missing step: $expected"
               exit 1
             fi
           done
-          echo "action.yml structure OK"
-
-      - name: Verify pdflatex-related steps are gated on tex-files
-        run: |
-          ACTION=actions/release/latex-manual/action.yml
+          # The required-token guard must run on an empty token.
+          GUARD_COND=$(yq eval '.runs.steps[] | select(.name == "Require latex-template-token") | .if' "$ACTION")
+          echo "$GUARD_COND" | grep -q "latex-template-token == ''" \
+            || { echo "::error::Require latex-template-token guard not gated on an empty token"; exit 1; }
+          # texlive/pdflatex/upload steps must be gated on tex-files != ''.
           for step in "Install LaTeX" "Compile PDF Documents" "Upload PDF Artifacts" "Get Release Tag" "Upload PDFs to Release"; do
             COND=$(yq eval ".runs.steps[] | select(.name == \"$step\") | .if" "$ACTION")
             if ! echo "$COND" | grep -q "tex-files != ''"; then
@@ -122,15 +215,64 @@ jobs:
               exit 1
             fi
           done
-          echo "pdflatex gating OK"
+          # The markdown-to-latex step must be skippable via an empty input.
+          CONV_COND=$(yq eval '.runs.steps[] | select(.name == "Generate LaTeX from Markdown") | .if' "$ACTION")
+          echo "$CONV_COND" | grep -q "markdown-input-dir != ''" \
+            || { echo "::error::Generate LaTeX from Markdown not gated on markdown-input-dir != ''"; exit 1; }
+          # Release steps must additionally gate on the github token.
+          for step in "Get Release Tag" "Upload PDFs to Release"; do
+            COND=$(yq eval ".runs.steps[] | select(.name == \"$step\") | .if" "$ACTION")
+            echo "$COND" | grep -q "github-token != ''" || { echo "::error::$step not gated on github-token"; exit 1; }
+          done
+          # "Get Release Tag" runs either on a release event OR when an explicit
+          # release-tag input is supplied (the workflow_run-after-release case).
+          # The upload step inherits the gate transitively via the tag output.
+          TAG_COND=$(yq eval '.runs.steps[] | select(.name == "Get Release Tag") | .if' "$ACTION")
+          echo "$TAG_COND" | grep -q "github.event_name == 'release'" \
+            || { echo "::error::Get Release Tag not gated on release event"; exit 1; }
+          echo "$TAG_COND" | grep -q "release-tag != ''" \
+            || { echo "::error::Get Release Tag does not honor the release-tag input"; exit 1; }
+          UPLOAD_COND=$(yq eval '.runs.steps[] | select(.name == "Upload PDFs to Release") | .if' "$ACTION")
+          echo "$UPLOAD_COND" | grep -q "steps.get_tag.outputs.tag != ''" \
+            || { echo "::error::Upload PDFs to Release not gated on the release tag output"; exit 1; }
+          # Get Release Tag must resolve the tag via the (unit-tested) script.
+          TAG_RUN=$(yq eval '.runs.steps[] | select(.name == "Get Release Tag") | .run' "$ACTION")
+          echo "$TAG_RUN" | grep -q 'scripts/resolve-release-tag.sh' \
+            || { echo "::error::Get Release Tag must call scripts/resolve-release-tag.sh"; exit 1; }
+          echo "steps + gating OK"
 
-  # ---------------------------------------------------------------------
-  # Happy path: install + ddocs + svn-graceful-failure + markdown-to-latex.
-  # Asserts the converted .tex appears, and that pdflatex/texlive did NOT
-  # run (tex-files is empty by default).
-  # ---------------------------------------------------------------------
+      - name: Verify artifact step + ddocs constant + SHA-pinned actions
+        run: |
+          ACTION=actions/release/latex-manual/action.yml
+          # Artifact name is the stable contract consumers download by.
+          NAME=$(yq eval '.runs.steps[] | select(.name == "Upload PDF Artifacts") | .with.name' "$ACTION")
+          test "$NAME" = "LaTeX-Documentation" || { echo "::error::artifact name changed: $NAME"; exit 1; }
+          # DDOCS_REPO constant is the single source of truth for the ddocs pin
+          # (pinned to a 40-hex commit). Quote-agnostic so the constant can be a
+          # plain assignment or a shell variable.
+          grep -Eq 'DDOCS_REPO=.?git\+https://github.com/Deltares-research/doc_utils\.git@[0-9a-f]{40}' "$ACTION" \
+            || { echo "::error::DDOCS_REPO constant missing or repo URL/pin changed"; exit 1; }
+          test "$(grep -c 'doc_utils.git' "$ACTION")" = "1" \
+            || { echo "::error::ddocs repo URL must appear exactly once (single source of truth)"; exit 1; }
+          # Third-party actions must be SHA-pinned (40-hex) per repo convention.
+          THIRD_PARTY=$(yq eval '.runs.steps[].uses' "$ACTION" | grep -v '^null$' | grep -v '^Deltares-research/' || true)
+          while IFS= read -r ref; do
+            [ -z "$ref" ] && continue
+            sha="${ref##*@}"
+            if ! echo "$sha" | grep -Eq '^[0-9a-f]{40}$'; then
+              echo "::error::third-party action not SHA-pinned: $ref"
+              exit 1
+            fi
+          done <<< "$THIRD_PARTY"
+          echo "artifact + constant + pinning OK"
+
+  # =====================================================================
+  # TIER 2 — BEHAVIORAL: run the action, tex-files='' (no TeX Live/pdflatex)
+  # =====================================================================
+
+  # Happy path + graceful no-token style fetch + default dirs.
   convert-markdown-to-latex:
-    name: convert markdown → latex (no pdflatex)
+    name: behavioral — convert markdown to latex (default dirs, no token)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -140,77 +282,192 @@ jobs:
           mkdir -p docs/mkdocs/user_docs docs/end-user-docs/source
           cp $MD_INPUT/index.md docs/mkdocs/user_docs/index.md
 
+      # Record whether pdflatex pre-exists on the runner image, so the
+      # post-action check can tell "the action installed TeX Live" apart from
+      # "the image already shipped it" (robust to future runner images).
+      - name: Record pre-existing pdflatex
+        id: pre
+        run: |
+          if command -v pdflatex >/dev/null; then echo "had=true" >> "$GITHUB_OUTPUT"; else echo "had=false" >> "$GITHUB_OUTPUT"; fi
+
       - name: Run action
+        # Invalid token → style fetch fails and the action continues via its
+        # graceful warning path. Exercised on every run.
         uses: ./actions/release/latex-manual
         with:
-          svn-username: ${{ env.SVN_USERNAME }}
-          svn-password: ${{ env.SVN_PASSWORD }}
-          svn-repo-url: ${{ env.SVN_REPO_URL }}
+          latex-template-token: ${{ env.FAKE_TOKEN }}
 
       - name: Verify ddocs is on PATH after install
         run: ddocs --version
 
-      - name: Verify ddocs converted markdown → latex
+      - name: Verify ddocs converted markdown to latex
         run: |
-          # ddocs writes one .tex per .md (default pattern '*.md').
-          # Our fixture has a single index.md, so index.tex must appear.
           test -f docs/end-user-docs/source/index.tex || {
             echo "::error::ddocs markdown-to-latex did not produce index.tex"
             ls -la docs/end-user-docs/source
             exit 1
           }
 
-      - name: Verify pdflatex was NOT run (tex-files empty)
+      - name: Verify pdflatex/TeX Live did NOT run (tex-files empty)
         run: |
+          # Compile must not have run (no .aux artifacts).
           if compgen -G "docs/end-user-docs/source/*.aux" > /dev/null; then
             echo "::error::found .aux files — pdflatex ran when it shouldn't have"; exit 1
           fi
-          if command -v pdflatex >/dev/null; then
-            echo "::error::pdflatex installed — texlive install ran when it shouldn't have"; exit 1
+          # The action must not have INSTALLED TeX Live; ignore a pdflatex that
+          # was already on the image before the action ran.
+          if [ "${{ steps.pre.outputs.had }}" = "false" ] && command -v pdflatex >/dev/null; then
+            echo "::error::pdflatex appeared — the action installed TeX Live when it shouldn't have"; exit 1
           fi
 
-  # ---------------------------------------------------------------------
-  # python-version is honored. The action passes it to actions/setup-python;
-  # asserting the resulting interpreter version proves the wiring works.
-  # ---------------------------------------------------------------------
-  python-version-pin:
-    name: python-version pin honored (3.13)
+  # Default python-version (no input) resolves to 3.12.
+  default-python-version:
+    name: behavioral — default python-version is 3.12
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Stage fixture
         run: |
           mkdir -p docs/mkdocs/user_docs docs/end-user-docs/source
           cp $MD_INPUT/index.md docs/mkdocs/user_docs/index.md
+      - name: Run action (no python-version)
+        uses: ./actions/release/latex-manual
+        with:
+          latex-template-token: ${{ env.FAKE_TOKEN }}
+      - name: Verify Python 3.12 active
+        run: python -c "import sys; assert sys.version_info[:2] == (3, 12), sys.version"
 
+  # python-version pin is honored.
+  python-version-pin:
+    name: behavioral — python-version pin honored (3.13)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Stage fixture
+        run: |
+          mkdir -p docs/mkdocs/user_docs docs/end-user-docs/source
+          cp $MD_INPUT/index.md docs/mkdocs/user_docs/index.md
       - name: Run action with python-version=3.13
         uses: ./actions/release/latex-manual
         with:
           python-version: '3.13'
-          svn-username: ${{ env.SVN_USERNAME }}
-          svn-password: ${{ env.SVN_PASSWORD }}
-          svn-repo-url: ${{ env.SVN_REPO_URL }}
-
+          latex-template-token: ${{ env.FAKE_TOKEN }}
       - name: Verify Python 3.13 active
         run: python -c "import sys; assert sys.version_info[:2] == (3, 13), sys.version"
 
-  # ---------------------------------------------------------------------
-  # End-to-end pdflatex run. Heavy (~5 min for texlive install) so manual
-  # only. Validates that with real tex-files values the texlive install,
-  # 3 pdflatex passes, bibtex citation handling, and the comma-separated
-  # multi-file loop all wire up correctly.
-  #
-  # Two .tex fixtures cover two paths through the action's compile loop:
-  #   * sample.tex   — has \cite{} + bibliography → exercises the bibtex
-  #                    branch that greps the .aux file for \citation.
-  #   * sample2.tex  — plain document with no citations → exercises the
-  #                    comma-separated multi-file path without conflating
-  #                    it with the bibtex branch.
-  # ---------------------------------------------------------------------
+  # markdown-input-dir + latex-output-dir are honored (non-default paths).
+  custom-input-output-dirs:
+    name: behavioral — custom markdown-input-dir + latex-output-dir
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Stage fixture in non-default input dir
+        run: |
+          mkdir -p custom/src
+          cp $MD_INPUT/index.md custom/src/index.md
+      - name: Run action with custom dirs
+        uses: ./actions/release/latex-manual
+        with:
+          markdown-input-dir: custom/src
+          latex-output-dir: custom/out
+          latex-template-token: ${{ env.FAKE_TOKEN }}
+      - name: Verify .tex landed in the custom output dir
+        run: |
+          test -f custom/out/index.tex || {
+            echo "::error::index.tex not found in custom/out"
+            ls -la custom/out || true
+            exit 1
+          }
+          # And nothing was written to the default location.
+          if [ -f docs/end-user-docs/source/index.tex ]; then
+            echo "::error::output written to default dir despite custom latex-output-dir"
+            exit 1
+          fi
+
+  # Multiple .md inputs → one .tex each (conversion loop / glob).
+  multiple-markdown-files:
+    name: behavioral — multiple markdown files convert independently
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Stage two markdown files
+        run: |
+          mkdir -p docs/mkdocs/user_docs docs/end-user-docs/source
+          cp $MD_MULTI/alpha.md docs/mkdocs/user_docs/alpha.md
+          cp $MD_MULTI/beta.md  docs/mkdocs/user_docs/beta.md
+      - name: Run action
+        uses: ./actions/release/latex-manual
+        with:
+          latex-template-token: ${{ env.FAKE_TOKEN }}
+      - name: Verify both .tex files were produced
+        run: |
+          for f in alpha beta; do
+            test -f docs/end-user-docs/source/$f.tex || {
+              echo "::error::$f.tex not produced"; ls -la docs/end-user-docs/source; exit 1;
+            }
+          done
+
+  # An empty latex-template-token must fail fast, before any install/compile.
+  require-token-empty-fails:
+    name: behavioral — empty latex-template-token fails fast
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run action with no token (expected to fail)
+        id: run
+        continue-on-error: true
+        uses: ./actions/release/latex-manual
+        with:
+          latex-template-token: ''
+      - name: Assert the action failed at the guard
+        run: |
+          if [ "${{ steps.run.outcome }}" != "failure" ]; then
+            echo "::error::action should have failed fast with an empty latex-template-token"
+            exit 1
+          fi
+          echo "failed fast as expected"
+
+  # markdown-input-dir='' skips the conversion entirely (for pure-LaTeX repos
+  # that author .tex directly). No markdown is staged, and the default input
+  # dir (docs/mkdocs/user_docs) does not exist — without the skip, ddocs would
+  # error on the missing dir; with it, the action proceeds and produces no .tex.
+  skip-conversion-when-markdown-empty:
+    name: behavioral — empty markdown-input-dir skips conversion
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run action with empty markdown-input-dir
+        uses: ./actions/release/latex-manual
+        with:
+          markdown-input-dir: ''
+          latex-template-token: ${{ env.FAKE_TOKEN }}
+      - name: Verify no .tex was produced by conversion
+        run: |
+          # The style fetch (invalid token) creates docs/end-user-docs/source
+          # but leaves it empty; conversion is skipped, so no .tex should exist.
+          if compgen -G "docs/end-user-docs/source/*.tex" > /dev/null; then
+            echo "::error::conversion ran despite empty markdown-input-dir"
+            ls -la docs/end-user-docs/source
+            exit 1
+          fi
+          echo "conversion correctly skipped"
+
+  # =====================================================================
+  # TIER 3 — END-TO-END: tex-files set → TeX Live + pdflatex (heavy)
+  # Runs on workflow_dispatch, or on a PR only when the composite action
+  # changed (decided by the detect-changes job).
+  # =====================================================================
+
+  # Compile loop + bibtex branch (both directions) + whitespace trimming.
+  #   * sample.tex  — has \cite{} + bibliography → bibtex branch fires.
+  #   * sample2.tex — no citations → bibtex must be skipped.
+  # tex-files uses a space after the comma to exercise the `xargs` trim.
   pdf-compile-end-to-end:
-    name: end-to-end pdflatex compile (workflow_dispatch only)
-    if: github.event_name == 'workflow_dispatch'
+    name: e2e — pdflatex compile
+    needs: detect-changes
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' && needs.detect-changes.outputs.action-changed == 'true')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -225,13 +482,11 @@ jobs:
           cp tests/data/release-latex-manual/end-to-end/sample2.tex docs/end-user-docs/source/sample2.tex
           cp tests/data/release-latex-manual/end-to-end/refs.bib    docs/end-user-docs/source/refs.bib
 
-      - name: Run action with comma-separated tex-files
+      - name: Run action with comma+space separated tex-files
         uses: ./actions/release/latex-manual
         with:
-          tex-files: 'sample,sample2'
-          svn-username: ${{ env.SVN_USERNAME }}
-          svn-password: ${{ env.SVN_PASSWORD }}
-          svn-repo-url: ${{ env.SVN_REPO_URL }}
+          tex-files: 'sample, sample2'   # space exercises the xargs trim
+          latex-template-token: ${{ env.FAKE_TOKEN }}
 
       - name: Verify both PDFs were produced
         run: |
@@ -246,18 +501,99 @@ jobs:
           test -f docs/end-user-docs/source/sample.aux
           test -f docs/end-user-docs/source/sample2.aux
 
-      - name: Verify bibtex branch fired for sample.tex
+      - name: Verify bibtex branch fired only for the cited document
         run: |
-          # The action greps .aux for \citation and runs bibtex when found.
-          # bibtex produces a .bbl file alongside the .aux. Its presence
-          # proves the bibtex branch executed (vs being silently skipped).
+          # bibtex produces a .bbl next to the .aux. Present for the cited doc,
+          # absent for the uncited one — proves both branches of the grep.
           test -f docs/end-user-docs/source/sample.bbl || {
             echo "::error::sample.bbl missing — bibtex did not run on sample.tex"
             ls -la docs/end-user-docs/source
             exit 1
           }
-          # And sample2 (no citations) must NOT have a .bbl.
           if [ -f docs/end-user-docs/source/sample2.bbl ]; then
             echo "::error::sample2.bbl exists — bibtex ran on a doc with no \\cite"
             exit 1
           fi
+
+  # The artifact uploaded by the action above is downloadable and contains the
+  # PDFs. Runs after the compile job and pulls the named artifact back.
+  pdf-artifact-uploaded:
+    name: e2e — PDF artifact is uploaded
+    needs: [detect-changes, pdf-compile-end-to-end]
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' && needs.detect-changes.outputs.action-changed == 'true')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download the action's artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: LaTeX-Documentation
+          path: downloaded
+
+      - name: Verify the PDFs are in the artifact
+        run: |
+          for f in sample sample2; do
+            test -f downloaded/$f.pdf || {
+              echo "::error::$f.pdf missing from the LaTeX-Documentation artifact"
+              ls -la downloaded || true
+              exit 1
+            }
+          done
+
+  # Exercises the release-upload path end to end: create a throwaway prerelease,
+  # run the action with release-tag + github-token so it compiles AND attaches
+  # the PDFs, assert the assets landed, then delete the release. workflow_dispatch
+  # only — it mutates the repo's releases and needs contents:write.
+  e2e-release-upload:
+    name: e2e — attach PDFs to a release (workflow_dispatch only)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create throwaway prerelease
+        id: rel
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="ci-latex-manual-${{ github.run_id }}-${{ github.run_attempt }}"
+          gh release create "$tag" --prerelease --target "${{ github.sha }}" \
+            --title "CI latex-manual upload test ($tag)" \
+            --notes "Temporary release for the latex-manual e2e upload test. Safe to delete."
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Stage fixture
+        run: |
+          mkdir -p docs/mkdocs/user_docs docs/end-user-docs/source
+          cp $MD_INPUT/index.md docs/mkdocs/user_docs/index.md
+          cp tests/data/release-latex-manual/end-to-end/sample.tex  docs/end-user-docs/source/sample.tex
+          cp tests/data/release-latex-manual/end-to-end/sample2.tex docs/end-user-docs/source/sample2.tex
+          cp tests/data/release-latex-manual/end-to-end/refs.bib    docs/end-user-docs/source/refs.bib
+
+      - name: Run action with release-tag (compile + attach to the release)
+        uses: ./actions/release/latex-manual
+        with:
+          tex-files: 'sample,sample2'
+          latex-template-token: ${{ env.FAKE_TOKEN }}
+          release-tag: ${{ steps.rel.outputs.tag }}
+          upload-to-release: 'true'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify both PDFs are attached to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          names=$(gh release view "${{ steps.rel.outputs.tag }}" --json assets --jq '.assets[].name')
+          echo "Attached assets:"; echo "$names"
+          for f in sample.pdf sample2.pdf; do
+            echo "$names" | grep -qx "$f" || { echo "::error::$f not attached to the release"; exit 1; }
+          done
+
+      - name: Cleanup throwaway release
+        if: always() && steps.rel.outputs.tag != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release delete "${{ steps.rel.outputs.tag }}" --yes --cleanup-tag || true

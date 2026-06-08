@@ -1,13 +1,14 @@
 name: 'Generate LaTeX Documentation'
 description: |
   Convert Markdown to LaTeX (and optionally PDF) using the ddocs CLI
-  (https://github.com/Deltares-research/doc_utils) and Deltares LaTeX styles
-  fetched from SVN.
+  (https://github.com/Deltares-research/doc_utils). Deltares LaTeX styles are
+  fetched by ddocs (get-tex-template) from the internal Deltares/LatexInstallation
+  repo.
 
-  Self-contained: installs its own Python, pandoc, subversion, ddocs, and
-  (when compiling PDFs) TeX Live. Does NOT touch the consumer's pyproject,
-  lock file, or virtualenv — the action is a documentation pipeline that
-  runs in isolation from the project's own dependency management.
+  Self-contained: installs its own Python and ddocs (ddocs bundles pandoc via
+  pypandoc-binary), and TeX Live via apt when compiling PDFs. Does NOT touch the
+  consumer's pyproject, lock file, or virtualenv — the action is a documentation
+  pipeline that runs in isolation from the project's own dependency management.
 
 inputs:
   python-version:
@@ -22,26 +23,38 @@ inputs:
     required: false
     default: ''
   markdown-input-dir:
-    description: 'Input directory containing Markdown files.'
+    description: |
+      Input directory containing Markdown files to convert to LaTeX.
+      Set to '' to skip the markdown-to-latex step entirely — use this when the
+      LaTeX sources are authored directly (no Markdown) and you only want the
+      style fetch + pdflatex compile.
     required: false
     default: 'docs/mkdocs/user_docs'
   latex-output-dir:
     description: 'Output directory for LaTeX (and PDF) files.'
     required: false
     default: 'docs/end-user-docs/source'
-  svn-username:
-    description: 'SVN username for Deltares styles.'
-    required: true
-  svn-password:
-    description: 'SVN password for Deltares styles.'
-    required: true
-  svn-repo-url:
-    description: 'SVN repository URL for Deltares styles.'
+  latex-template-token:
+    description: |
+      Token with read access to the internal Deltares/LatexInstallation repo,
+      from which ddocs fetches the LaTeX styles (get-tex-template). Required:
+      the action fails immediately if it is empty. The consumer's default
+      GITHUB_TOKEN is scoped to its own repo and will NOT work — supply a PAT
+      or GitHub App token with access to that repo.
     required: true
   upload-to-release:
-    description: 'Whether to upload PDFs to GitHub release.'
+    description: 'Whether to upload PDFs to a GitHub release.'
     required: false
     default: 'true'
+  release-tag:
+    description: |
+      Tag of an existing GitHub release to attach the built PDFs to. When set,
+      the PDFs are uploaded to that release regardless of the triggering event
+      (useful when this action runs from a workflow_run after a release, where
+      there is no `release` event payload). When empty, the tag is taken from
+      the `release` event payload (so the upload only happens on a release).
+    required: false
+    default: ''
   github-token:
     description: 'GitHub token for release uploads.'
     required: false
@@ -50,66 +63,83 @@ inputs:
 runs:
   using: 'composite'
   steps:
-    - name: Install System Dependencies
+    # Fail fast on a missing styles token, before any install or compile, so a
+    # misconfiguration surfaces immediately instead of as a confusing
+    # "*.sty not found" pdflatex error minutes later.
+    - name: Require latex-template-token
+      if: inputs.latex-template-token == ''
       shell: bash
       run: |
-        echo "::group::Installing pandoc + subversion"
-        sudo apt-get update
-        sudo apt-get install -y pandoc subversion
-        pandoc --version
-        echo "::endgroup::"
+        echo "::error::latex-template-token input is empty. Pass a token with read access to Deltares/LatexInstallation (typically wired from a repository or organization secret)."
+        exit 1
+
+    # Action-wide constants. Composite actions have no top-level `env:`, so we
+    # publish them to $GITHUB_ENV in the first step and reference $VAR below.
+    # DDOCS_REPO: pip target for the ddocs CLI, pinned to the commit behind the
+    # doc_utils 0.2.0 release for reproducibility — bump the SHA (and the version
+    # comment) after the `@` to upgrade ddocs. This is the single source of truth.
+    # DDOCS_KEY: short hash of that pin, used in the pip cache key so bumping
+    # ddocs (which may change deps) starts a fresh cache instead of freezing it.
+    # TEXLIVE_IMAGE: the runner image family (e.g. "ubuntu24"), used in the
+    # TeX Live cache key so a major image bump invalidates it. $ImageOS is a
+    # runner env var (not exposed to ${{ env.* }}), so publish it here.
+    - name: Define constants
+      shell: bash
+      run: |
+        DDOCS_REPO="git+https://github.com/Deltares-research/doc_utils.git@354afe0af29ad98a4a2506da7483bc0c96d4ac16"  # 0.2.0
+        {
+          echo "DDOCS_REPO=$DDOCS_REPO"
+          echo "DDOCS_KEY=$(printf '%s' "$DDOCS_REPO" | sha256sum | cut -c1-12)"
+          echo "TEXLIVE_IMAGE=${ImageOS:-$RUNNER_OS}"
+        } >> "$GITHUB_ENV"
 
     - name: Set up Python
       uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
       with:
         python-version: ${{ inputs.python-version }}
 
+    # Cache pip's download/wheel cache so ddocs and its dependencies — notably
+    # the ~34 MB pypandoc-binary wheel — are not re-downloaded on every run.
+    - name: Cache pip
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      with:
+        path: ~/.cache/pip
+        key: latex-manual-pip-${{ runner.os }}-py${{ inputs.python-version }}-${{ env.DDOCS_KEY }}
+        restore-keys: |
+          latex-manual-pip-${{ runner.os }}-py${{ inputs.python-version }}-
+
+    # ddocs depends on pypandoc-binary, which bundles the pandoc executable in
+    # the wheel — so installing ddocs also provides pandoc (no apt, no runtime
+    # download). The markdown-to-latex step puts the bundled binary on PATH via
+    # ddocs's check_pandoc_installed().
     - name: Install ddocs
       shell: bash
       run: |
         echo "::group::Installing ddocs"
         python -m pip install --upgrade pip
-        python -m pip install "git+https://github.com/Deltares-research/doc_utils.git@b93c6611d49bf24183423f8445e4816bfc6bd559"  # 0.1.0
+        python -m pip install "$DDOCS_REPO"
         ddocs --version
         echo "::endgroup::"
 
-    - name: Checkout Deltares LaTeX Styles
+    - name: Fetch Deltares LaTeX Styles
       shell: bash
       env:
-        SVN_USERNAME: ${{ inputs.svn-username }}
-        SVN_PASSWORD: ${{ inputs.svn-password }}
-        SVN_REPO_URL: ${{ inputs.svn-repo-url }}
+        # ddocs get-tex-template reads GITHUB_TOKEN for HTTPS auth against the
+        # internal Deltares/LatexInstallation repo. --no-ssh disables the SSH
+        # fallback (CI runners have no key), so auth is token → anonymous.
+        GITHUB_TOKEN: ${{ inputs.latex-template-token }}
         LATEX_DIR: ${{ inputs.latex-output-dir }}
       run: |
-        echo "::group::Checkout Deltares LaTeX Styles"
-        cd "$LATEX_DIR"
-
-        echo "::group::Downloading from SVN Repository"
-        if ! svn checkout --username "$SVN_USERNAME" --password "$SVN_PASSWORD" --non-interactive "$SVN_REPO_URL" temp_svn; then
-          echo "::warning::Failed to checkout SVN repository. Continuing without Deltares styles."
-          echo "::endgroup::"
-          exit 0
+        echo "::group::Fetching Deltares LaTeX styles via ddocs get-tex-template"
+        if ! ddocs get-tex-template --output-dir "$LATEX_DIR" --no-ssh; then
+          echo "::warning::Failed to fetch Deltares LaTeX templates. Continuing without Deltares styles."
         fi
         echo "::endgroup::"
 
-        echo "::group::Copying LaTeX Style Files"
-        if [ -d "temp_svn/templates/latex/tex/latex/deltares" ]; then
-          cp -r temp_svn/templates/latex/tex/latex/deltares/* . || echo "::warning::Failed to copy deltares styles"
-        fi
-
-        if [ -d "temp_svn/templates/latex/tex/latex/nomentbl/deltares" ]; then
-          cp -r temp_svn/templates/latex/tex/latex/nomentbl/deltares/* . || echo "::warning::Failed to copy nomentbl styles"
-        fi
-
-        if [ -d "temp_svn/templates/latex/bibtex/bst/deltares" ]; then
-          cp -r temp_svn/templates/latex/bibtex/bst/deltares/* . || echo "::warning::Failed to copy bibtex styles"
-        fi
-
-        rm -rf temp_svn
-        echo "Deltares LaTeX styles setup completed."
-        echo "::endgroup::"
-
+    # Skipped when markdown-input-dir is empty — for projects whose LaTeX is
+    # authored directly (no Markdown source), leaving only style-fetch + compile.
     - name: Generate LaTeX from Markdown
+      if: inputs.markdown-input-dir != ''
       shell: bash
       env:
         MARKDOWN_INPUT_DIR: ${{ inputs.markdown-input-dir }}
@@ -121,22 +151,69 @@ runs:
           --output "$LATEX_OUTPUT_DIR"
         echo "::endgroup::"
 
+    # Cache the *installed* TeX Live tree. apt installs into root-owned system
+    # paths and generates format files, which actions/cache cannot restore
+    # directly (it writes as the runner user). So we cache a single user-owned
+    # tarball (created by the Install step on a miss) and sudo-extract it on a
+    # hit. The key includes the runner image family (ImageOS, e.g. "ubuntu24")
+    # so a major image bump — which changes the TeX Live version — invalidates
+    # the cache automatically. Bump the `-vN` suffix to force a rebuild otherwise.
+    - name: Cache TeX Live
+      if: inputs.tex-files != ''
+      id: texlive-cache
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      with:
+        path: ~/texlive-cache.tar
+        key: latex-manual-texlive-${{ env.TEXLIVE_IMAGE }}-v4
+
+    # On a cache hit: restore the tarball (no apt, no download). On a miss:
+    # install via ddocs' apt backend and pack the files the install added (a
+    # before/after filesystem diff) — so the next run can skip all of it.
     - name: Install LaTeX
       if: inputs.tex-files != ''
       shell: bash
+      env:
+        TEXLIVE_CACHE_HIT: ${{ steps.texlive-cache.outputs.cache-hit }}
       run: |
-        echo "::group::Installing LaTeX Packages"
-        sudo apt-get update
-        sudo apt-get install -y \
-          texlive-latex-base \
-          texlive-latex-extra \
-          texlive-fonts-recommended \
-          texlive-fonts-extra \
-          texlive-bibtex-extra \
-          texlive-science biber
-
+        set -euo pipefail
+        CACHE_FILE="$HOME/texlive-cache.tar"
+        # Directories where the apt TeX Live install lands: binaries + their
+        # alternatives symlinks (/usr/bin, /etc/alternatives), shared libs
+        # (libkpathsea, …), the texmf trees, and the generated formats/ls-R.
+        WATCH_DIRS=(/usr/bin /etc/alternatives /usr/lib/x86_64-linux-gnu \
+                    /usr/share/texlive /usr/share/texmf /var/lib/texmf /etc/texmf)
+        snapshot() {
+          for d in "${WATCH_DIRS[@]}"; do
+            [ -e "$d" ] && find "$d" \( -type f -o -type l \) 2>/dev/null
+          done | sort -u
+        }
+        if [ "$TEXLIVE_CACHE_HIT" = "true" ] && [ -f "$CACHE_FILE" ]; then
+          echo "::group::Restoring TeX Live from cache"
+          # Restrict extraction to the TeX prefixes the pack writes, so a
+          # corrupted/poisoned cache can't drop files elsewhere under / (the
+          # pack stores members relative: usr/…, etc/…, var/…).
+          sudo tar -xpf "$CACHE_FILE" -C / usr etc var
+          sudo ldconfig            # refresh the shared-library cache (libkpathsea, …)
+          sudo mktexlsr            # refresh the ls-R filename databases
+          echo "::endgroup::"
+        else
+          echo "::notice::TeX Live cache miss — installing from scratch (~2-3 min); the cache will be populated for next time."
+          echo "::group::Installing pdflatex via ddocs (apt backend)"
+          snapshot > /tmp/fs-before.txt
+          ddocs pdflatex download --backend apt
+          snapshot > /tmp/fs-after.txt
+          echo "::endgroup::"
+          echo "::group::Packing TeX Live for the cache"
+          # Pack every file/symlink the install ADDED in those dirs — captures
+          # binaries, alternatives symlinks (e.g. /usr/bin/bibtex), shared libs,
+          # texmf data, and generated formats, regardless of dpkg ownership.
+          comm -13 /tmp/fs-before.txt /tmp/fs-after.txt > /tmp/texlive-files.txt
+          echo "Packing $(wc -l < /tmp/texlive-files.txt) new files/symlinks"
+          sudo tar -cpf "$CACHE_FILE" --no-recursion -T /tmp/texlive-files.txt
+          sudo chown "$(id -u):$(id -g)" "$CACHE_FILE"
+          echo "::endgroup::"
+        fi
         pdflatex --version
-        echo "::endgroup::"
 
     - name: Compile PDF Documents
       if: inputs.tex-files != ''
@@ -203,14 +280,20 @@ runs:
         name: LaTeX-Documentation
         path: ${{ inputs.latex-output-dir }}/*.pdf
 
+    # Resolve which release tag to upload to: the explicit release-tag input
+    # wins (e.g. when run from a workflow_run after a release); otherwise fall
+    # back to the tag from a `release` event payload. Empty result => no upload.
     - name: Get Release Tag
-      if: inputs.tex-files != '' && inputs.upload-to-release == 'true' && inputs.github-token != '' && github.event_name == 'release'
+      if: inputs.tex-files != '' && inputs.upload-to-release == 'true' && inputs.github-token != '' && (inputs.release-tag != '' || github.event_name == 'release')
       id: get_tag
       shell: bash
       env:
-        RELEASE_TAG_NAME: ${{ github.event.release.tag_name }}
+        RELEASE_TAG_INPUT: ${{ inputs.release-tag }}
+        RELEASE_EVENT_TAG: ${{ github.event.release.tag_name }}
       run: |
-        echo "tag=$RELEASE_TAG_NAME" >> "$GITHUB_OUTPUT"
+        tag=$(bash "$GITHUB_ACTION_PATH/scripts/resolve-release-tag.sh" "$RELEASE_TAG_INPUT" "$RELEASE_EVENT_TAG")
+        echo "tag=$tag" >> "$GITHUB_OUTPUT"
+        echo "Resolved release tag: $tag"
 
     - name: Upload PDFs to Release
       if: inputs.tex-files != '' && inputs.upload-to-release == 'true' && inputs.github-token != '' && steps.get_tag.outputs.tag != ''
