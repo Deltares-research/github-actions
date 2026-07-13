@@ -161,3 +161,32 @@ jobs:
             echo "::error::Expected pixi 0.48.0, got $INSTALLED"
             exit 1
           fi
+
+  pixi-version-empty-defaults:
+    name: empty version falls back to default
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage fixture
+        run: |
+          cp tests/data/pixi/defaults/pixi.toml ./pixi.toml
+          cp tests/data/pixi/defaults/pixi.lock ./pixi.lock
+
+      # An explicit empty string is what a wrapper action forwards when its own
+      # version input is unset; it must resolve to the action's pinned default,
+      # not to "latest".
+      - name: Run action with empty version
+        uses: ./actions/python-setup/pixi
+        with:
+          version: ''
+          verify-lock: 'true'
+
+      - name: Verify default pixi version active
+        run: |
+          INSTALLED=$(pixi --version | awk '{print $2}')
+          echo "Installed pixi: $INSTALLED"
+          if [ "$INSTALLED" != "0.49.0" ]; then
+            echo "::error::Expected default pixi 0.49.0, got $INSTALLED"
+            exit 1
+          fi

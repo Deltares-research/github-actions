@@ -241,6 +241,33 @@ jobs:
             exit 1
           fi
 
+  pip-version-empty-defaults:
+    name: empty version falls back to default
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage fixture
+        run: |
+          cp tests/data/pip/defaults/pyproject.toml ./pyproject.toml
+
+      # An explicit empty string is what a wrapper action forwards when its own
+      # version input is unset; it must resolve to the action's pinned default,
+      # not to whatever python -m venv ships / latest.
+      - name: Run action with empty version
+        uses: ./actions/python-setup/pip
+        with:
+          version: ''
+
+      - name: Verify default pip version active
+        run: |
+          INSTALLED=$(pip --version | awk '{print $2}')
+          echo "Installed pip: $INSTALLED"
+          if [ "$INSTALLED" != "26.1.2" ]; then
+            echo "::error::Expected default pip 26.1.2, got $INSTALLED"
+            exit 1
+          fi
+
   venv-activation:
     name: bare python and pip resolve to .venv after action
     runs-on: ubuntu-latest

@@ -256,6 +256,35 @@ jobs:
             exit 1
           fi
 
+  uv-version-empty-defaults:
+    name: empty version falls back to default
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage fixture
+        run: |
+          cp tests/data/uv/defaults/pyproject.toml ./pyproject.toml
+          cp tests/data/uv/defaults/uv.lock ./uv.lock
+
+      # An explicit empty string is what a wrapper action forwards when its own
+      # version input is unset; it must resolve to the action's pinned default,
+      # not to "latest".
+      - name: Run action with empty version
+        uses: ./actions/python-setup/uv
+        with:
+          version: ''
+          verify-lock: 'true'
+
+      - name: Verify default uv version active
+        run: |
+          INSTALLED=$(uv --version | awk '{print $2}')
+          echo "Installed uv: $INSTALLED"
+          if [ "$INSTALLED" != "0.11.28" ]; then
+            echo "::error::Expected default uv 0.11.28, got $INSTALLED"
+            exit 1
+          fi
+
   cache-write-true-saves:
     name: cache-write=true persists cache
     runs-on: ubuntu-latest
