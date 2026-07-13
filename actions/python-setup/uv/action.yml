@@ -7,9 +7,9 @@ inputs:
     required: false
     default: '3.12'
   version:
-    description: 'uv version to install. Empty string means latest. Example: "", "0.9.5", "0.9.8".'
+    description: 'uv version to install. Empty string means latest. Example: "", "0.11.28", "0.9.8".'
     required: false
-    default: ''
+    default: '0.11.28'
   install-groups:
     description: 'PEP 735 dependency groups to install via uv sync --group. Space- or comma-separated. Example: "dev", "dev docs", "dev,docs".'
     required: false

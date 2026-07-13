@@ -7,9 +7,9 @@ inputs:
     required: false
     default: '3.12'
   version:
-    description: 'pip version to pin inside the venv. Empty string means use whatever python -m venv ships, then upgrade to latest. Example: "", "24.3.1", "25.0".'
+    description: 'pip version to pin inside the venv. Empty string means use whatever python -m venv ships, then upgrade to latest. Example: "", "26.1.2", "24.3.1".'
     required: false
-    default: ''
+    default: '26.1.2'
   requirements-files:
     description: 'Space- or comma-separated requirements files to install with `pip install -r`. Example: "requirements.txt", "requirements.txt requirements-dev.txt", "reqs/base.txt,reqs/dev.txt".'
     required: false
