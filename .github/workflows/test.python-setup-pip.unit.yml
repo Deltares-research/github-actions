@@ -230,7 +230,7 @@ jobs:
       - name: Run action with pinned pip version
         uses: ./actions/python-setup/pip
         with:
-          pip-version: '24.3.1'
+          version: '24.3.1'
 
       - name: Verify pinned pip version active
         run: |

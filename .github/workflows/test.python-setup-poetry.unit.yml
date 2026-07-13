@@ -248,7 +248,7 @@ jobs:
       - name: Run action with pinned poetry version
         uses: ./actions/python-setup/poetry
         with:
-          poetry-version: '2.3.0'
+          version: '2.3.0'
           verify-lock: 'true'
 
       - name: Verify pinned poetry version active

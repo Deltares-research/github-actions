@@ -6,7 +6,7 @@ inputs:
     description: 'Python version to install. Example: "3.12", "3.13", "3.12.5".'
     required: false
     default: '3.12'
-  pip-version:
+  version:
     description: 'pip version to pin inside the venv. Empty string means use whatever python -m venv ships, then upgrade to latest. Example: "", "24.3.1", "25.0".'
     required: false
     default: ''
@@ -40,7 +40,7 @@ runs:
       id: cache
       with:
         path: ~/.cache/pip
-        key: pip-${{ runner.os }}-py${{ inputs.python-version }}-pip${{ inputs.pip-version }}-${{ hashFiles('**/requirements*.txt', '**/pyproject.toml', '**/setup.py', '**/setup.cfg') }}
+        key: pip-${{ runner.os }}-py${{ inputs.python-version }}-pip${{ inputs.version }}-${{ hashFiles('**/requirements*.txt', '**/pyproject.toml', '**/setup.py', '**/setup.cfg') }}
 
     - name: Create venv and activate
       # Activation via GITHUB_PATH puts .venv/bin first on PATH for all
@@ -57,7 +57,7 @@ runs:
     - name: Upgrade pip
       shell: bash
       env:
-        PIP_VERSION: ${{ inputs.pip-version }}
+        PIP_VERSION: ${{ inputs.version }}
       run: |
         echo "::group::Upgrading pip"
         if [[ -n "$PIP_VERSION" ]]; then
@@ -117,4 +117,4 @@ runs:
       uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
       with:
         path: ~/.cache/pip
-        key: pip-${{ runner.os }}-py${{ inputs.python-version }}-pip${{ inputs.pip-version }}-${{ hashFiles('**/requirements*.txt', '**/pyproject.toml', '**/setup.py', '**/setup.cfg') }}
+        key: pip-${{ runner.os }}-py${{ inputs.python-version }}-pip${{ inputs.version }}-${{ hashFiles('**/requirements*.txt', '**/pyproject.toml', '**/setup.py', '**/setup.cfg') }}

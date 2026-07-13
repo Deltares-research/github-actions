@@ -244,7 +244,7 @@ jobs:
       - name: Run action with pinned uv version
         uses: ./actions/python-setup/uv
         with:
-          uv-version: '0.9.5'
+          version: '0.9.5'
           verify-lock: 'true'
 
       - name: Verify pinned uv version active
