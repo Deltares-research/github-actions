@@ -47,9 +47,9 @@ inputs:
     required: false
     default: 'dev docs'
   version:
-    description: 'Pixi version to install (pixi only; passed through to setup-pixi). Example: "v0.49.0", "latest".'
+    description: 'Version of the selected package manager to install (forwarded to the matching python-setup/<pm> action). Empty means the package manager''s own default/latest. Example: uv "0.9.8", poetry "2.3.3", pixi "v0.49.0".'
     required: false
-    default: 'v0.49.0'
+    default: ''
   pixi-environments:
     description: 'Pixi environments to install (pixi only; passed through to setup-pixi). Empty means the default environment.'
     required: false
@@ -106,6 +106,7 @@ runs:
       uses: Deltares-research/github-actions/actions/python-setup/uv@main
       with:
         python-version: ${{ inputs.python-version }}
+        version: ${{ inputs.version }}
         install-groups: ${{ inputs.install-groups }}
         verify-lock: ${{ inputs.verify-lock }}
 
@@ -114,6 +115,7 @@ runs:
       uses: Deltares-research/github-actions/actions/python-setup/poetry@main
       with:
         python-version: ${{ inputs.python-version }}
+        version: ${{ inputs.version }}
         install-groups: ${{ inputs.install-groups }}
         verify-lock: ${{ inputs.verify-lock }}
 
