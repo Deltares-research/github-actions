@@ -2,7 +2,7 @@ name: 'Setup Python with Pixi'
 description: 'Setup Python environment with Pixi and install environments, with lock-file caching'
 
 inputs:
-  pixi-version:
+  version:
     description: 'Pixi version to install. Example: "v0.49.0", "v0.48.0", "latest".'
     required: false
     default: 'v0.49.0'
@@ -29,11 +29,11 @@ runs:
     - name: Setup Pixi
       uses: prefix-dev/setup-pixi@8ca4608ef7f4daeb54f5205b20d0b7cb42f11143 # v0.8.14
       with:
-        pixi-version: ${{ inputs.pixi-version }}
+        pixi-version: ${{ inputs.version }}
         environments: ${{ inputs.environments }}
         activate-environment: ${{ inputs.activate-environment }}
         cache: true
-        cache-key: pixi-${{ runner.os }}-pixi${{ inputs.pixi-version }}-${{ hashFiles('**/pixi.lock') }}
+        cache-key: pixi-${{ runner.os }}-pixi${{ inputs.version }}-${{ hashFiles('**/pixi.lock') }}
         cache-write: ${{ inputs.cache-write }}
 
     - name: Verify lock file is up to date

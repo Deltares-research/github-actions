@@ -150,7 +150,7 @@ jobs:
       - name: Run action with pinned pixi version
         uses: ./actions/python-setup/pixi
         with:
-          pixi-version: 'v0.48.0'
+          version: 'v0.48.0'
           verify-lock: 'true'
 
       - name: Verify pinned pixi version active

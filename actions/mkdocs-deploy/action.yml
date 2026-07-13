@@ -37,6 +37,10 @@ inputs:
     description: 'PEP 735 dependency groups to install (uv --group / poetry --with; pixi installs from manifest). Space- or comma-separated. Example: "docs", "dev docs", "dev,docs".'
     required: false
     default: 'docs'
+  version:
+    description: 'Pixi version to install (pixi only; passed through to setup-pixi). Example: "v0.49.0", "latest".'
+    required: false
+    default: 'v0.49.0'
   pixi-environments:
     description: 'Pixi environments to install (pixi only; passed through to setup-pixi). Space-separated. Empty means the default environment. Example: "docs", "py312 docs".'
     required: false
@@ -78,6 +82,7 @@ runs:
         echo "Python version:       ${{ inputs.python-version }}"
         echo "Package manager:      ${{ inputs.package-manager }}"
         echo "Install groups:       ${{ inputs.install-groups }}"
+        echo "Pixi version:         ${{ inputs.version }}"
         echo "Pixi environments:    ${{ inputs.pixi-environments }}"
         echo "Pixi activate env:    ${{ inputs.pixi-activate-environment }}"
         echo "Trigger:              ${{ inputs.trigger }}"
@@ -108,6 +113,7 @@ runs:
       if: inputs.package-manager == 'pixi'
       uses: Deltares-research/github-actions/actions/python-setup/pixi@main
       with:
+        version: ${{ inputs.version }}
         environments: ${{ inputs.pixi-environments }}
         activate-environment: ${{ inputs.pixi-activate-environment }}
 

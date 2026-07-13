@@ -46,6 +46,10 @@ inputs:
     description: 'Dependency groups to install (uv/poetry only; pixi installs from manifest). Space- or comma-separated.'
     required: false
     default: 'dev docs'
+  version:
+    description: 'Pixi version to install (pixi only; passed through to setup-pixi). Example: "v0.49.0", "latest".'
+    required: false
+    default: 'v0.49.0'
   pixi-environments:
     description: 'Pixi environments to install (pixi only; passed through to setup-pixi). Empty means the default environment.'
     required: false
@@ -117,6 +121,7 @@ runs:
       if: inputs.package-manager == 'pixi'
       uses: Deltares-research/github-actions/actions/python-setup/pixi@main
       with:
+        version: ${{ inputs.version }}
         environments: ${{ inputs.pixi-environments }}
         activate-environment: ${{ inputs.pixi-activate-environment }}
         verify-lock: ${{ inputs.verify-lock }}
