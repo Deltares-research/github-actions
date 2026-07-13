@@ -7,7 +7,7 @@ inputs:
     required: false
     default: '3.12'
   version:
-    description: 'uv version to install. Empty string means latest. Example: "", "0.11.28", "0.9.8".'
+    description: 'uv version to install. Empty string falls back to the default. Example: "0.11.28", "0.9.8".'
     required: false
     default: '0.11.28'
   install-groups:
@@ -30,6 +30,18 @@ inputs:
 runs:
   using: 'composite'
   steps:
+    - name: Resolve uv version
+      id: resolve
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+      run: |
+        # A wrapper action forwarding an unset value sends an explicit empty
+        # string, which bypasses this input's `default:`. Fall back to the pinned
+        # default here so an empty value always resolves to it.
+        # Keep the fallback in sync with the `version` input default above.
+        echo "version=${VERSION:-0.11.28}" >> "$GITHUB_OUTPUT"
+
     - name: Set up Python
       uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
       with:
@@ -38,14 +50,14 @@ runs:
     - name: Install uv
       uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4
       with:
-        version: ${{ inputs.version }}
+        version: ${{ steps.resolve.outputs.version }}
 
     - name: Restore uv download cache
       uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
       id: cache
       with:
         path: ${{ env.UV_CACHE_DIR }}
-        key: uv-${{ runner.os }}-py${{ inputs.python-version }}-uv${{ inputs.version }}-${{ hashFiles('**/uv.lock') }}
+        key: uv-${{ runner.os }}-py${{ inputs.python-version }}-uv${{ steps.resolve.outputs.version }}-${{ hashFiles('**/uv.lock') }}
 
     - name: Verify lock file is up to date
       if: inputs.verify-lock == 'true'
@@ -103,4 +115,4 @@ runs:
       uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
       with:
         path: ${{ env.UV_CACHE_DIR }}
-        key: uv-${{ runner.os }}-py${{ inputs.python-version }}-uv${{ inputs.version }}-${{ hashFiles('**/uv.lock') }}
+        key: uv-${{ runner.os }}-py${{ inputs.python-version }}-uv${{ steps.resolve.outputs.version }}-${{ hashFiles('**/uv.lock') }}

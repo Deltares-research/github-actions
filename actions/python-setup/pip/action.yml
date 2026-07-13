@@ -7,7 +7,7 @@ inputs:
     required: false
     default: '3.12'
   version:
-    description: 'pip version to pin inside the venv. Empty string means use whatever python -m venv ships, then upgrade to latest. Example: "", "26.1.2", "24.3.1".'
+    description: 'pip version to pin inside the venv. Empty string falls back to the default. Example: "26.1.2", "24.3.1".'
     required: false
     default: '26.1.2'
   requirements-files:
@@ -30,6 +30,18 @@ inputs:
 runs:
   using: 'composite'
   steps:
+    - name: Resolve pip version
+      id: resolve
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+      run: |
+        # A wrapper action forwarding an unset value sends an explicit empty
+        # string, which bypasses this input's `default:`. Fall back to the pinned
+        # default here so an empty value always resolves to it.
+        # Keep the fallback in sync with the `version` input default above.
+        echo "version=${VERSION:-26.1.2}" >> "$GITHUB_OUTPUT"
+
     - name: Set up Python
       uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
       with:
@@ -40,7 +52,7 @@ runs:
       id: cache
       with:
         path: ~/.cache/pip
-        key: pip-${{ runner.os }}-py${{ inputs.python-version }}-pip${{ inputs.version }}-${{ hashFiles('**/requirements*.txt', '**/pyproject.toml', '**/setup.py', '**/setup.cfg') }}
+        key: pip-${{ runner.os }}-py${{ inputs.python-version }}-pip${{ steps.resolve.outputs.version }}-${{ hashFiles('**/requirements*.txt', '**/pyproject.toml', '**/setup.py', '**/setup.cfg') }}
 
     - name: Create venv and activate
       # Activation via GITHUB_PATH puts .venv/bin first on PATH for all
@@ -57,14 +69,10 @@ runs:
     - name: Upgrade pip
       shell: bash
       env:
-        PIP_VERSION: ${{ inputs.version }}
+        PIP_VERSION: ${{ steps.resolve.outputs.version }}
       run: |
         echo "::group::Upgrading pip"
-        if [[ -n "$PIP_VERSION" ]]; then
-          .venv/bin/python -m pip install --upgrade "pip==$PIP_VERSION"
-        else
-          .venv/bin/python -m pip install --upgrade pip
-        fi
+        .venv/bin/python -m pip install --upgrade "pip==$PIP_VERSION"
         .venv/bin/python -m pip --version
         echo "::endgroup::"
 
@@ -117,4 +125,4 @@ runs:
       uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
       with:
         path: ~/.cache/pip
-        key: pip-${{ runner.os }}-py${{ inputs.python-version }}-pip${{ inputs.version }}-${{ hashFiles('**/requirements*.txt', '**/pyproject.toml', '**/setup.py', '**/setup.cfg') }}
+        key: pip-${{ runner.os }}-py${{ inputs.python-version }}-pip${{ steps.resolve.outputs.version }}-${{ hashFiles('**/requirements*.txt', '**/pyproject.toml', '**/setup.py', '**/setup.cfg') }}

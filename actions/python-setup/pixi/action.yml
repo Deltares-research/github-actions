@@ -3,7 +3,7 @@ description: 'Setup Python environment with Pixi and install environments, with 
 
 inputs:
   version:
-    description: 'Pixi version to install. Example: "v0.49.0", "v0.48.0", "latest".'
+    description: 'Pixi version to install. Empty string falls back to the default. Example: "v0.49.0", "v0.48.0", "latest".'
     required: false
     default: 'v0.49.0'
   environments:
@@ -26,14 +26,26 @@ inputs:
 runs:
   using: 'composite'
   steps:
+    - name: Resolve Pixi version
+      id: resolve
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+      run: |
+        # A wrapper action forwarding an unset value sends an explicit empty
+        # string, which bypasses this input's `default:`. Fall back to the pinned
+        # default here so an empty value always resolves to it.
+        # Keep the fallback in sync with the `version` input default above.
+        echo "version=${VERSION:-v0.49.0}" >> "$GITHUB_OUTPUT"
+
     - name: Setup Pixi
       uses: prefix-dev/setup-pixi@8ca4608ef7f4daeb54f5205b20d0b7cb42f11143 # v0.8.14
       with:
-        pixi-version: ${{ inputs.version }}
+        pixi-version: ${{ steps.resolve.outputs.version }}
         environments: ${{ inputs.environments }}
         activate-environment: ${{ inputs.activate-environment }}
         cache: true
-        cache-key: pixi-${{ runner.os }}-pixi${{ inputs.version }}-${{ hashFiles('**/pixi.lock') }}
+        cache-key: pixi-${{ runner.os }}-pixi${{ steps.resolve.outputs.version }}-${{ hashFiles('**/pixi.lock') }}
         cache-write: ${{ inputs.cache-write }}
 
     - name: Verify lock file is up to date
