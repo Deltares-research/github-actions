@@ -7,9 +7,9 @@ inputs:
     required: false
     default: '3.12'
   version:
-    description: 'Poetry version to install. Requires Poetry >= 2.0 (uses the `poetry sync` command). Empty string falls back to the default. Example: "2.3.3", "2.3.0", "2.0.1".'
+    description: 'Poetry version to install. Requires Poetry >= 2.0 (uses the `poetry sync` command). Empty or omitted falls back to the pinned default (DEFAULT_VERSION in the "Resolve Poetry version" step). Example: "2.3.3", "2.3.0", "2.0.1".'
     required: false
-    default: '2.3.3'
+    default: ''
   install-groups:
     description: 'Poetry groups to install via poetry sync --with. Space- or comma-separated. Example: "dev", "dev docs", "dev,docs".'
     required: false
@@ -35,12 +35,12 @@ runs:
       shell: bash
       env:
         VERSION: ${{ inputs.version }}
+        # Single source of truth for the default Poetry version. A composite action
+        # can't declare a top-level constant, so it lives here on the first step;
+        # an empty or omitted `version` input resolves to it.
+        DEFAULT_VERSION: '2.3.3'
       run: |
-        # A wrapper action forwarding an unset value sends an explicit empty
-        # string, which bypasses this input's `default:`. Fall back to the pinned
-        # default here so an empty value always resolves to it.
-        # Keep the fallback in sync with the `version` input default above.
-        echo "version=${VERSION:-2.3.3}" >> "$GITHUB_OUTPUT"
+        echo "version=${VERSION:-$DEFAULT_VERSION}" >> "$GITHUB_OUTPUT"
 
     - name: Set up Python
       uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6

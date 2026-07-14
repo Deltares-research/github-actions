@@ -7,9 +7,9 @@ inputs:
     required: false
     default: '3.12'
   version:
-    description: 'pip version to pin inside the venv. Empty string falls back to the default. Example: "26.1.2", "24.3.1".'
+    description: 'pip version to pin inside the venv. Empty or omitted falls back to the pinned default (DEFAULT_VERSION in the "Resolve pip version" step). Example: "26.1.2", "24.3.1".'
     required: false
-    default: '26.1.2'
+    default: ''
   requirements-files:
     description: 'Space- or comma-separated requirements files to install with `pip install -r`. Example: "requirements.txt", "requirements.txt requirements-dev.txt", "reqs/base.txt,reqs/dev.txt".'
     required: false
@@ -35,12 +35,12 @@ runs:
       shell: bash
       env:
         VERSION: ${{ inputs.version }}
+        # Single source of truth for the default pip version. A composite action
+        # can't declare a top-level constant, so it lives here on the first step;
+        # an empty or omitted `version` input resolves to it.
+        DEFAULT_VERSION: '26.1.2'
       run: |
-        # A wrapper action forwarding an unset value sends an explicit empty
-        # string, which bypasses this input's `default:`. Fall back to the pinned
-        # default here so an empty value always resolves to it.
-        # Keep the fallback in sync with the `version` input default above.
-        echo "version=${VERSION:-26.1.2}" >> "$GITHUB_OUTPUT"
+        echo "version=${VERSION:-$DEFAULT_VERSION}" >> "$GITHUB_OUTPUT"
 
     - name: Set up Python
       uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6

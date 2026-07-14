@@ -7,9 +7,9 @@ inputs:
     required: false
     default: '3.12'
   version:
-    description: 'uv version to install. Empty string falls back to the default. Example: "0.11.28", "0.9.8".'
+    description: 'uv version to install. Empty or omitted falls back to the pinned default (DEFAULT_VERSION in the "Resolve uv version" step). Example: "0.11.28", "0.9.8".'
     required: false
-    default: '0.11.28'
+    default: ''
   install-groups:
     description: 'PEP 735 dependency groups to install via uv sync --group. Space- or comma-separated. Example: "dev", "dev docs", "dev,docs".'
     required: false
@@ -35,12 +35,12 @@ runs:
       shell: bash
       env:
         VERSION: ${{ inputs.version }}
+        # Single source of truth for the default uv version. A composite action
+        # can't declare a top-level constant, so it lives here on the first step;
+        # an empty or omitted `version` input resolves to it.
+        DEFAULT_VERSION: '0.11.28'
       run: |
-        # A wrapper action forwarding an unset value sends an explicit empty
-        # string, which bypasses this input's `default:`. Fall back to the pinned
-        # default here so an empty value always resolves to it.
-        # Keep the fallback in sync with the `version` input default above.
-        echo "version=${VERSION:-0.11.28}" >> "$GITHUB_OUTPUT"
+        echo "version=${VERSION:-$DEFAULT_VERSION}" >> "$GITHUB_OUTPUT"
 
     - name: Set up Python
       uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
