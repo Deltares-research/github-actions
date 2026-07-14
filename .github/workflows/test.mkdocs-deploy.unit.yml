@@ -201,6 +201,41 @@ jobs:
       - name: Verify Python 3.13
         run: python -c "import sys; assert sys.version_info[:2] == (3, 13), sys.version"
 
+  version-forwarded:
+    name: version forwarded to inner python-setup (uv 0.11.27)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Stage fixture
+        run: |
+          cp tests/data/mkdocs-deploy/uv/pyproject.toml ./pyproject.toml
+          cp tests/data/mkdocs-deploy/uv/uv.lock ./uv.lock
+
+      - name: Set up fake git remote
+        uses: ./.github/workflows/test-helpers/setup-fake-remote
+
+      # A non-default uv version proves the wrapper forwards `version` down to
+      # the inner python-setup/uv action (whose own default is 0.11.28).
+      - name: Run action with version=0.11.27
+        uses: ./actions/mkdocs-deploy
+        with:
+          version: '0.11.27'
+          install-groups: 'docs'
+          trigger: ''
+          deploy-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify forwarded uv version
+        run: |
+          INSTALLED=$(uv --version | awk '{print $2}')
+          echo "Installed uv: $INSTALLED"
+          if [ "$INSTALLED" != "0.11.27" ]; then
+            echo "::error::Expected forwarded uv 0.11.27, got $INSTALLED"
+            exit 1
+          fi
+
   git-config-applied:
     name: action sets git config to github.actor
     runs-on: ubuntu-latest
