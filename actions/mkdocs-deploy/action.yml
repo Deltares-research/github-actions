@@ -38,7 +38,7 @@ inputs:
     required: false
     default: 'docs'
   version:
-    description: 'Version of the selected package manager to install (forwarded to the matching python-setup/<pm> action). Empty means the package manager''s own default/latest. Example: uv "0.9.8", poetry "2.3.3", pixi "v0.49.0".'
+    description: 'Version of the selected package manager to install (forwarded to the matching python-setup/<pm> action). Empty or omitted falls back to that action''s pinned default (its DEFAULT_VERSION), not "latest". Example: uv "0.11.28", poetry "2.4.1", pixi "v0.72.2".'
     required: false
     default: ''
   pixi-environments:
