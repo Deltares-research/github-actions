@@ -186,7 +186,7 @@ jobs:
         run: |
           INSTALLED=$(pixi --version | awk '{print $2}')
           echo "Installed pixi: $INSTALLED"
-          if [ "$INSTALLED" != "0.49.0" ]; then
-            echo "::error::Expected default pixi 0.49.0, got $INSTALLED"
+          if [ "$INSTALLED" != "0.72.2" ]; then
+            echo "::error::Expected default pixi 0.72.2, got $INSTALLED"
             exit 1
           fi

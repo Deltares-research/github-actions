@@ -7,7 +7,7 @@ inputs:
     required: false
     default: '3.12'
   version:
-    description: 'Poetry version to install. Requires Poetry >= 2.0 (uses the `poetry sync` command). Empty or omitted falls back to the pinned default (DEFAULT_VERSION in the "Resolve Poetry version" step). Example: "2.3.3", "2.3.0", "2.0.1".'
+    description: 'Poetry version to install. Requires Poetry >= 2.0 (uses the `poetry sync` command). Empty or omitted falls back to the pinned default (DEFAULT_VERSION in the "Resolve Poetry version" step). Example: "2.4.1", "2.3.3", "2.0.1".'
     required: false
     default: ''
   install-groups:
@@ -38,7 +38,7 @@ runs:
         # Single source of truth for the default Poetry version. A composite action
         # can't declare a top-level constant, so it lives here on the first step;
         # an empty or omitted `version` input resolves to it.
-        DEFAULT_VERSION: '2.3.3'
+        DEFAULT_VERSION: '2.4.1'
       run: |
         echo "version=${VERSION:-$DEFAULT_VERSION}" >> "$GITHUB_OUTPUT"
 
