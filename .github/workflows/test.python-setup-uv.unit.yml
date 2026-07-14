@@ -312,7 +312,7 @@ jobs:
 
       - name: Look up cache after action ran
         id: verify
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: ${{ env.UV_CACHE_DIR }}
           key: uv-${{ runner.os }}-py3.12-uv0.11.28-${{ hashFiles('**/uv.lock') }}
@@ -345,7 +345,7 @@ jobs:
 
       - name: Look up cache after action ran
         id: verify
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: ${{ env.UV_CACHE_DIR }}
           key: uv-${{ runner.os }}-py3.12-uv0.11.28-${{ hashFiles('**/uv.lock') }}

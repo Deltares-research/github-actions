@@ -316,7 +316,7 @@ jobs:
 
       - name: Look up cache after action ran
         id: verify
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: ~/.virtualenvs
           key: poetry-${{ runner.os }}-py3.12-poetry2.4.1-${{ hashFiles('**/poetry.lock') }}
@@ -349,7 +349,7 @@ jobs:
 
       - name: Look up cache after action ran
         id: verify
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: ~/.virtualenvs
           key: poetry-${{ runner.os }}-py3.12-poetry2.4.1-${{ hashFiles('**/poetry.lock') }}

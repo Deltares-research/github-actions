@@ -326,7 +326,7 @@ jobs:
 
       - name: Look up cache after action ran
         id: verify
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: ~/.cache/pip
           key: pip-${{ runner.os }}-py3.12-pip26.1.2-${{ hashFiles('**/requirements*.txt', '**/pyproject.toml', '**/setup.py', '**/setup.cfg') }}
@@ -359,7 +359,7 @@ jobs:
 
       - name: Look up cache after action ran
         id: verify
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: ~/.cache/pip
           key: pip-${{ runner.os }}-py3.12-pip26.1.2-${{ hashFiles('**/requirements*.txt', '**/pyproject.toml', '**/setup.py', '**/setup.cfg') }}
