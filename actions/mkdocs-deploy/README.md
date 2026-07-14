@@ -81,7 +81,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
-      - uses: Deltares-research/github-actions/actions/mkdocs-deploy@mkdocs/v1
+      - uses: Deltares-research/github-actions/actions/mkdocs-deploy@mkdocs-deploy/v1
         with:
           trigger: 'pr'
           deploy-token: ${{ secrets.GITHUB_TOKEN }}
@@ -92,7 +92,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
-      - uses: Deltares-research/github-actions/actions/mkdocs-deploy@mkdocs/v1
+      - uses: Deltares-research/github-actions/actions/mkdocs-deploy@mkdocs-deploy/v1
         with:
           trigger: 'main'
           deploy-token: ${{ secrets.GITHUB_TOKEN }}
@@ -103,7 +103,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
-      - uses: Deltares-research/github-actions/actions/mkdocs-deploy@mkdocs/v1
+      - uses: Deltares-research/github-actions/actions/mkdocs-deploy@mkdocs-deploy/v1
         with:
           trigger: 'release'
           deploy-token: ${{ secrets.GITHUB_TOKEN }}
@@ -114,7 +114,7 @@ jobs:
 ### 2. Poetry project, custom python and group name
 
 ```yaml
-- uses: Deltares-research/github-actions/actions/mkdocs-deploy@mkdocs/v1
+- uses: Deltares-research/github-actions/actions/mkdocs-deploy@mkdocs-deploy/v1
   with:
     package-manager: 'poetry'
     python-version: '3.13'
@@ -128,7 +128,7 @@ jobs:
 Default environment (mike/mkdocs in `[pypi-dependencies]`):
 
 ```yaml
-- uses: Deltares-research/github-actions/actions/mkdocs-deploy@mkdocs/v1
+- uses: Deltares-research/github-actions/actions/mkdocs-deploy@mkdocs-deploy/v1
   with:
     package-manager: 'pixi'
     trigger: 'main'
@@ -138,7 +138,7 @@ Default environment (mike/mkdocs in `[pypi-dependencies]`):
 Dedicated `docs` environment (mike/mkdocs in `[feature.docs.pypi-dependencies]`, `[environments] docs = ["docs"]`):
 
 ```yaml
-- uses: Deltares-research/github-actions/actions/mkdocs-deploy@mkdocs/v1
+- uses: Deltares-research/github-actions/actions/mkdocs-deploy@mkdocs-deploy/v1
   with:
     package-manager: 'pixi'
     pixi-environments: 'docs'
@@ -160,7 +160,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
-      - uses: Deltares-research/github-actions/actions/mkdocs-deploy@mkdocs/v1
+      - uses: Deltares-research/github-actions/actions/mkdocs-deploy@mkdocs-deploy/v1
         with:
           trigger: 'release'
           deploy-token: ${{ secrets.GITHUB_TOKEN }}
@@ -170,7 +170,7 @@ jobs:
 ### 5. Custom release alias (`stable` instead of `latest`)
 
 ```yaml
-- uses: Deltares-research/github-actions/actions/mkdocs-deploy@mkdocs/v1
+- uses: Deltares-research/github-actions/actions/mkdocs-deploy@mkdocs-deploy/v1
   with:
     trigger: 'release'
     deploy-token: ${{ secrets.GITHUB_TOKEN }}
@@ -183,7 +183,7 @@ jobs:
 Wire `release-prerelease` straight from the GitHub release event payload — when the release is marked prerelease in the GitHub UI, mike publishes the tag standalone without aliasing it to `latest` or making it default:
 
 ```yaml
-- uses: Deltares-research/github-actions/actions/mkdocs-deploy@mkdocs/v1
+- uses: Deltares-research/github-actions/actions/mkdocs-deploy@mkdocs-deploy/v1
   with:
     trigger: 'release'
     deploy-token: ${{ secrets.GITHUB_TOKEN }}
@@ -196,7 +196,7 @@ Wire `release-prerelease` straight from the GitHub release event payload — whe
 For libraries: pushes to main get a `main/` version on gh-pages, but the served default stays at the stable release alias.
 
 ```yaml
-- uses: Deltares-research/github-actions/actions/mkdocs-deploy@mkdocs/v1
+- uses: Deltares-research/github-actions/actions/mkdocs-deploy@mkdocs-deploy/v1
   with:
     trigger: 'main'
     deploy-token: ${{ secrets.GITHUB_TOKEN }}
