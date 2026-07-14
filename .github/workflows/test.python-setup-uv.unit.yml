@@ -315,7 +315,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ${{ env.UV_CACHE_DIR }}
-          key: uv-${{ runner.os }}-py3.12-uv-${{ hashFiles('**/uv.lock') }}
+          key: uv-${{ runner.os }}-py3.12-uv0.11.28-${{ hashFiles('**/uv.lock') }}
           lookup-only: true
 
       - name: Assert cache was saved
@@ -348,7 +348,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ${{ env.UV_CACHE_DIR }}
-          key: uv-${{ runner.os }}-py3.12-uv-${{ hashFiles('**/uv.lock') }}
+          key: uv-${{ runner.os }}-py3.12-uv0.11.28-${{ hashFiles('**/uv.lock') }}
           lookup-only: true
 
       - name: Assert cache was NOT saved

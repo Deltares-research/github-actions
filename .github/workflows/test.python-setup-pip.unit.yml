@@ -329,7 +329,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ~/.cache/pip
-          key: pip-${{ runner.os }}-py3.12-pip-${{ hashFiles('**/requirements*.txt', '**/pyproject.toml', '**/setup.py', '**/setup.cfg') }}
+          key: pip-${{ runner.os }}-py3.12-pip26.1.2-${{ hashFiles('**/requirements*.txt', '**/pyproject.toml', '**/setup.py', '**/setup.cfg') }}
           lookup-only: true
 
       - name: Assert cache was saved
@@ -362,7 +362,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ~/.cache/pip
-          key: pip-${{ runner.os }}-py3.12-pip-${{ hashFiles('**/requirements*.txt', '**/pyproject.toml', '**/setup.py', '**/setup.cfg') }}
+          key: pip-${{ runner.os }}-py3.12-pip26.1.2-${{ hashFiles('**/requirements*.txt', '**/pyproject.toml', '**/setup.py', '**/setup.cfg') }}
           lookup-only: true
 
       - name: Assert cache was NOT saved
