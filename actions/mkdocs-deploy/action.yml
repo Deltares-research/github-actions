@@ -97,7 +97,7 @@ runs:
     # Python environment setup — delegated to actions/python-setup/<pm>
     - name: Setup Python with uv
       if: inputs.package-manager == 'uv'
-      uses: Deltares-research/github-actions/actions/python-setup/uv@main
+      uses: Deltares-research/github-actions/actions/python-setup/uv@uv/v1
       with:
         python-version: ${{ inputs.python-version }}
         version: ${{ inputs.version }}
@@ -105,7 +105,7 @@ runs:
 
     - name: Setup Python with Poetry
       if: inputs.package-manager == 'poetry'
-      uses: Deltares-research/github-actions/actions/python-setup/poetry@main
+      uses: Deltares-research/github-actions/actions/python-setup/poetry@poetry/v1
       with:
         python-version: ${{ inputs.python-version }}
         version: ${{ inputs.version }}
@@ -113,7 +113,7 @@ runs:
 
     - name: Setup Python with Pixi
       if: inputs.package-manager == 'pixi'
-      uses: Deltares-research/github-actions/actions/python-setup/pixi@main
+      uses: Deltares-research/github-actions/actions/python-setup/pixi@pixi/v1
       with:
         version: ${{ inputs.version }}
         environments: ${{ inputs.pixi-environments }}
