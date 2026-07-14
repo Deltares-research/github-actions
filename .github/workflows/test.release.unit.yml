@@ -444,6 +444,7 @@ jobs:
       - test-validate-toolchain-usage
       - test-linkify-refs
       - test-linkify-refs-usage
+      - version-wiring
     if: always()
     steps:
       - name: Summary
@@ -458,3 +459,4 @@ jobs:
           echo "- validate-toolchain usage:   ${{ needs.test-validate-toolchain-usage.result }}" >> $GITHUB_STEP_SUMMARY
           echo "- linkify-refs matrix:        ${{ needs.test-linkify-refs.result }}" >> $GITHUB_STEP_SUMMARY
           echo "- linkify-refs usage:         ${{ needs.test-linkify-refs-usage.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- version-wiring:             ${{ needs.version-wiring.result }}" >> $GITHUB_STEP_SUMMARY
