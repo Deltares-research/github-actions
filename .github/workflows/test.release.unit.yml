@@ -413,6 +413,26 @@ jobs:
           fi
           echo "[OK] script exited $rc when called without an argument"
 
+  version-wiring:
+    name: version input is forwarded to every package-manager step
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # release/github composes the inner python-setup/<pm> actions @main, so a
+      # runtime forwarding check can't work until the version input exists on
+      # main. Assert the wiring statically instead: each of the uv, poetry and
+      # pixi setup steps must forward the version input, so a dropped or renamed
+      # line is caught here.
+      - name: Assert version is forwarded to uv, poetry and pixi steps
+        run: |
+          count=$(grep -cE '^[[:space:]]+version:[[:space:]]+.*inputs\.version' actions/release/github/action.yml)
+          echo "version-forwarding lines found: $count (expected 3)"
+          if [ "$count" -ne 3 ]; then
+            echo "::error::release/github must forward version to 3 package-manager steps, found $count"
+            exit 1
+          fi
+
   summary:
     runs-on: ubuntu-latest
     needs:
