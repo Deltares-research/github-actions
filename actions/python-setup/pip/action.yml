@@ -6,8 +6,8 @@ inputs:
     description: 'Python version to install. Example: "3.12", "3.13", "3.12.5".'
     required: false
     default: '3.12'
-  pip-version:
-    description: 'pip version to pin inside the venv. Empty string means use whatever python -m venv ships, then upgrade to latest. Example: "", "24.3.1", "25.0".'
+  version:
+    description: 'pip version to pin inside the venv. Empty or omitted falls back to the pinned default (DEFAULT_VERSION in the "Resolve pip version" step). Example: "26.1.2", "24.3.1".'
     required: false
     default: ''
   requirements-files:
@@ -30,17 +30,29 @@ inputs:
 runs:
   using: 'composite'
   steps:
+    - name: Resolve pip version
+      id: resolve
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+        # Single source of truth for the default pip version. A composite action
+        # can't declare a top-level constant, so it lives here on the first step;
+        # an empty or omitted `version` input resolves to it.
+        DEFAULT_VERSION: '26.1.2'
+      run: |
+        echo "version=${VERSION:-$DEFAULT_VERSION}" >> "$GITHUB_OUTPUT"
+
     - name: Set up Python
-      uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+      uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
       with:
         python-version: ${{ inputs.python-version }}
 
     - name: Restore pip download cache
-      uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       id: cache
       with:
         path: ~/.cache/pip
-        key: pip-${{ runner.os }}-py${{ inputs.python-version }}-pip${{ inputs.pip-version }}-${{ hashFiles('**/requirements*.txt', '**/pyproject.toml', '**/setup.py', '**/setup.cfg') }}
+        key: pip-${{ runner.os }}-py${{ inputs.python-version }}-pip${{ steps.resolve.outputs.version }}-${{ hashFiles('**/requirements*.txt', '**/pyproject.toml', '**/setup.py', '**/setup.cfg') }}
 
     - name: Create venv and activate
       # Activation via GITHUB_PATH puts .venv/bin first on PATH for all
@@ -57,14 +69,10 @@ runs:
     - name: Upgrade pip
       shell: bash
       env:
-        PIP_VERSION: ${{ inputs.pip-version }}
+        PIP_VERSION: ${{ steps.resolve.outputs.version }}
       run: |
         echo "::group::Upgrading pip"
-        if [[ -n "$PIP_VERSION" ]]; then
-          .venv/bin/python -m pip install --upgrade "pip==$PIP_VERSION"
-        else
-          .venv/bin/python -m pip install --upgrade pip
-        fi
+        .venv/bin/python -m pip install --upgrade "pip==$PIP_VERSION"
         .venv/bin/python -m pip --version
         echo "::endgroup::"
 
@@ -114,7 +122,7 @@ runs:
 
     - name: Save pip download cache
       if: inputs.cache-write == 'true' && steps.cache.outputs.cache-hit != 'true'
-      uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ~/.cache/pip
-        key: pip-${{ runner.os }}-py${{ inputs.python-version }}-pip${{ inputs.pip-version }}-${{ hashFiles('**/requirements*.txt', '**/pyproject.toml', '**/setup.py', '**/setup.cfg') }}
+        key: pip-${{ runner.os }}-py${{ inputs.python-version }}-pip${{ steps.resolve.outputs.version }}-${{ hashFiles('**/requirements*.txt', '**/pyproject.toml', '**/setup.py', '**/setup.cfg') }}

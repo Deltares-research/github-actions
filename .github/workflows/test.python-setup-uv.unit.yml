@@ -244,7 +244,7 @@ jobs:
       - name: Run action with pinned uv version
         uses: ./actions/python-setup/uv
         with:
-          uv-version: '0.9.5'
+          version: '0.9.5'
           verify-lock: 'true'
 
       - name: Verify pinned uv version active
@@ -253,6 +253,35 @@ jobs:
           echo "Installed uv: $INSTALLED"
           if [ "$INSTALLED" != "0.9.5" ]; then
             echo "::error::Expected uv 0.9.5, got $INSTALLED"
+            exit 1
+          fi
+
+  uv-version-empty-defaults:
+    name: empty version falls back to default
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage fixture
+        run: |
+          cp tests/data/uv/defaults/pyproject.toml ./pyproject.toml
+          cp tests/data/uv/defaults/uv.lock ./uv.lock
+
+      # An explicit empty string is what a wrapper action forwards when its own
+      # version input is unset; it must resolve to the action's pinned default,
+      # not to "latest".
+      - name: Run action with empty version
+        uses: ./actions/python-setup/uv
+        with:
+          version: ''
+          verify-lock: 'true'
+
+      - name: Verify default uv version active
+        run: |
+          INSTALLED=$(uv --version | awk '{print $2}')
+          echo "Installed uv: $INSTALLED"
+          if [ "$INSTALLED" != "0.11.28" ]; then
+            echo "::error::Expected default uv 0.11.28, got $INSTALLED"
             exit 1
           fi
 
@@ -283,10 +312,10 @@ jobs:
 
       - name: Look up cache after action ran
         id: verify
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: ${{ env.UV_CACHE_DIR }}
-          key: uv-${{ runner.os }}-py3.12-uv-${{ hashFiles('**/uv.lock') }}
+          key: uv-${{ runner.os }}-py3.12-uv0.11.28-${{ hashFiles('**/uv.lock') }}
           lookup-only: true
 
       - name: Assert cache was saved
@@ -316,10 +345,10 @@ jobs:
 
       - name: Look up cache after action ran
         id: verify
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: ${{ env.UV_CACHE_DIR }}
-          key: uv-${{ runner.os }}-py3.12-uv-${{ hashFiles('**/uv.lock') }}
+          key: uv-${{ runner.os }}-py3.12-uv0.11.28-${{ hashFiles('**/uv.lock') }}
           lookup-only: true
 
       - name: Assert cache was NOT saved

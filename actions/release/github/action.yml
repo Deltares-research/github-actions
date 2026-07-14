@@ -46,6 +46,10 @@ inputs:
     description: 'Dependency groups to install (uv/poetry only; pixi installs from manifest). Space- or comma-separated.'
     required: false
     default: 'dev docs'
+  version:
+    description: 'Version of the selected package manager to install (forwarded to the matching python-setup/<pm> action). Empty or omitted falls back to that action''s pinned default (its DEFAULT_VERSION), not "latest". Example: uv "0.11.28", poetry "2.4.1", pixi "v0.72.2".'
+    required: false
+    default: ''
   pixi-environments:
     description: 'Pixi environments to install (pixi only; passed through to setup-pixi). Empty means the default environment.'
     required: false
@@ -102,6 +106,7 @@ runs:
       uses: Deltares-research/github-actions/actions/python-setup/uv@main
       with:
         python-version: ${{ inputs.python-version }}
+        version: ${{ inputs.version }}
         install-groups: ${{ inputs.install-groups }}
         verify-lock: ${{ inputs.verify-lock }}
 
@@ -110,6 +115,7 @@ runs:
       uses: Deltares-research/github-actions/actions/python-setup/poetry@main
       with:
         python-version: ${{ inputs.python-version }}
+        version: ${{ inputs.version }}
         install-groups: ${{ inputs.install-groups }}
         verify-lock: ${{ inputs.verify-lock }}
 
@@ -117,6 +123,7 @@ runs:
       if: inputs.package-manager == 'pixi'
       uses: Deltares-research/github-actions/actions/python-setup/pixi@main
       with:
+        version: ${{ inputs.version }}
         environments: ${{ inputs.pixi-environments }}
         activate-environment: ${{ inputs.pixi-activate-environment }}
         verify-lock: ${{ inputs.verify-lock }}

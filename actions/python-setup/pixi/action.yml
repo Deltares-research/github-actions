@@ -2,10 +2,10 @@ name: 'Setup Python with Pixi'
 description: 'Setup Python environment with Pixi and install environments, with lock-file caching'
 
 inputs:
-  pixi-version:
-    description: 'Pixi version to install. Example: "v0.49.0", "v0.48.0", "latest".'
+  version:
+    description: 'Pixi version to install. Empty or omitted falls back to the pinned default (DEFAULT_VERSION in the "Resolve Pixi version" step). Example: "v0.72.2", "v0.49.0", "latest".'
     required: false
-    default: 'v0.49.0'
+    default: ''
   environments:
     description: 'Pixi environments to install (space-separated; passed through to setup-pixi). Empty means the default environment. Example: "", "py312", "py311 py312".'
     required: false
@@ -26,14 +26,26 @@ inputs:
 runs:
   using: 'composite'
   steps:
+    - name: Resolve Pixi version
+      id: resolve
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+        # Single source of truth for the default Pixi version. A composite action
+        # can't declare a top-level constant, so it lives here on the first step;
+        # an empty or omitted `version` input resolves to it.
+        DEFAULT_VERSION: 'v0.72.2'
+      run: |
+        echo "version=${VERSION:-$DEFAULT_VERSION}" >> "$GITHUB_OUTPUT"
+
     - name: Setup Pixi
-      uses: prefix-dev/setup-pixi@8ca4608ef7f4daeb54f5205b20d0b7cb42f11143 # v0.8.14
+      uses: prefix-dev/setup-pixi@a09b6247153796b190642a2b53fac4241043cf6f # v0.10.0
       with:
-        pixi-version: ${{ inputs.pixi-version }}
+        pixi-version: ${{ steps.resolve.outputs.version }}
         environments: ${{ inputs.environments }}
         activate-environment: ${{ inputs.activate-environment }}
         cache: true
-        cache-key: pixi-${{ runner.os }}-pixi${{ inputs.pixi-version }}-${{ hashFiles('**/pixi.lock') }}
+        cache-key: pixi-${{ runner.os }}-pixi${{ steps.resolve.outputs.version }}-${{ hashFiles('**/pixi.lock') }}
         cache-write: ${{ inputs.cache-write }}
 
     - name: Verify lock file is up to date

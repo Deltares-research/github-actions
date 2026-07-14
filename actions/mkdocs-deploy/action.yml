@@ -37,6 +37,10 @@ inputs:
     description: 'PEP 735 dependency groups to install (uv --group / poetry --with; pixi installs from manifest). Space- or comma-separated. Example: "docs", "dev docs", "dev,docs".'
     required: false
     default: 'docs'
+  version:
+    description: 'Version of the selected package manager to install (forwarded to the matching python-setup/<pm> action). Empty or omitted falls back to that action''s pinned default (its DEFAULT_VERSION), not "latest". Example: uv "0.11.28", poetry "2.4.1", pixi "v0.72.2".'
+    required: false
+    default: ''
   pixi-environments:
     description: 'Pixi environments to install (pixi only; passed through to setup-pixi). Space-separated. Empty means the default environment. Example: "docs", "py312 docs".'
     required: false
@@ -78,6 +82,7 @@ runs:
         echo "Python version:       ${{ inputs.python-version }}"
         echo "Package manager:      ${{ inputs.package-manager }}"
         echo "Install groups:       ${{ inputs.install-groups }}"
+        echo "PM version:           ${{ inputs.version }}"
         echo "Pixi environments:    ${{ inputs.pixi-environments }}"
         echo "Pixi activate env:    ${{ inputs.pixi-activate-environment }}"
         echo "Trigger:              ${{ inputs.trigger }}"
@@ -95,6 +100,7 @@ runs:
       uses: Deltares-research/github-actions/actions/python-setup/uv@main
       with:
         python-version: ${{ inputs.python-version }}
+        version: ${{ inputs.version }}
         install-groups: ${{ inputs.install-groups }}
 
     - name: Setup Python with Poetry
@@ -102,12 +108,14 @@ runs:
       uses: Deltares-research/github-actions/actions/python-setup/poetry@main
       with:
         python-version: ${{ inputs.python-version }}
+        version: ${{ inputs.version }}
         install-groups: ${{ inputs.install-groups }}
 
     - name: Setup Python with Pixi
       if: inputs.package-manager == 'pixi'
       uses: Deltares-research/github-actions/actions/python-setup/pixi@main
       with:
+        version: ${{ inputs.version }}
         environments: ${{ inputs.pixi-environments }}
         activate-environment: ${{ inputs.pixi-activate-environment }}
 

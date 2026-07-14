@@ -248,7 +248,7 @@ jobs:
       - name: Run action with pinned poetry version
         uses: ./actions/python-setup/poetry
         with:
-          poetry-version: '2.3.0'
+          version: '2.3.0'
           verify-lock: 'true'
 
       - name: Verify pinned poetry version active
@@ -257,6 +257,35 @@ jobs:
           echo "Installed poetry: $INSTALLED"
           if [ "$INSTALLED" != "2.3.0" ]; then
             echo "::error::Expected poetry 2.3.0, got $INSTALLED"
+            exit 1
+          fi
+
+  poetry-version-empty-defaults:
+    name: empty version falls back to default
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage fixture
+        run: |
+          cp tests/data/poetry/defaults/pyproject.toml ./pyproject.toml
+          cp tests/data/poetry/defaults/poetry.lock ./poetry.lock
+
+      # An explicit empty string is what a wrapper action forwards when its own
+      # version input is unset; it must resolve to the action's pinned default,
+      # not to "latest".
+      - name: Run action with empty version
+        uses: ./actions/python-setup/poetry
+        with:
+          version: ''
+          verify-lock: 'true'
+
+      - name: Verify default poetry version active
+        run: |
+          INSTALLED=$(poetry --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+          echo "Installed poetry: $INSTALLED"
+          if [ "$INSTALLED" != "2.4.1" ]; then
+            echo "::error::Expected default poetry 2.4.1, got $INSTALLED"
             exit 1
           fi
 
@@ -287,10 +316,10 @@ jobs:
 
       - name: Look up cache after action ran
         id: verify
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: ~/.virtualenvs
-          key: poetry-${{ runner.os }}-py3.12-poetry2.3.3-${{ hashFiles('**/poetry.lock') }}
+          key: poetry-${{ runner.os }}-py3.12-poetry2.4.1-${{ hashFiles('**/poetry.lock') }}
           lookup-only: true
 
       - name: Assert cache was saved
@@ -320,10 +349,10 @@ jobs:
 
       - name: Look up cache after action ran
         id: verify
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: ~/.virtualenvs
-          key: poetry-${{ runner.os }}-py3.12-poetry2.3.3-${{ hashFiles('**/poetry.lock') }}
+          key: poetry-${{ runner.os }}-py3.12-poetry2.4.1-${{ hashFiles('**/poetry.lock') }}
           lookup-only: true
 
       - name: Assert cache was NOT saved

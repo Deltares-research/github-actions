@@ -22,6 +22,7 @@ Each invocation runs **exactly one** deploy path, selected by `trigger`. The act
 | `python-version`  | no       | `3.12`   | Python version (uv/poetry only; pixi pins Python in `pixi.toml`). E.g. `3.12`, `3.13`, `3.12.5`. |
 | `package-manager` | no       | `uv`     | One of `uv`, `poetry`, `pixi`. |
 | `install-groups`  | no       | `docs`   | PEP 735 dependency groups to install (uv `--group` / poetry `--with`; pixi installs from manifest). Space- or comma-separated. |
+| `version`         | no       | `''`     | Version of the selected package manager, forwarded to `python-setup/<pm>`. Empty falls back to that action's pinned default (its `DEFAULT_VERSION`), not `latest`. E.g. uv `0.11.28`, poetry `2.4.1`, pixi `v0.72.2`. |
 | `pixi-environments`        | no | `''` | **pixi only** — environments to install (space-separated). Empty = default environment. Mirrors `actions/release/github`. |
 | `pixi-activate-environment`| no | `''` | **pixi only** — environment to put on PATH after install, so `pixi run` / `mike` resolve into it. Must also appear in `pixi-environments`. |
 | `trigger`         | **yes**  | —        | Which deploy path to run. One of `pr`, `main`, `release`. |
