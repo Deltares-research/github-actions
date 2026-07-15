@@ -207,11 +207,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # mkdocs-deploy composes the inner python-setup/<pm> actions @main, so a
-      # runtime forwarding check can't work until the version input exists on
-      # main. Assert the wiring statically instead: each of the uv, poetry and
-      # pixi setup steps must forward the version input, so a dropped or renamed
-      # line is caught here.
+      # mkdocs-deploy composes the inner python-setup/<pm> actions by pinned
+      # tag, resolved as a separate checkout at runtime (not from this branch),
+      # so assert the wiring statically here: each of the uv, poetry and pixi
+      # setup steps must forward the version input, so a dropped or renamed line
+      # is caught.
       - name: Assert version is forwarded to uv, poetry and pixi steps
         run: |
           count=$(grep -cE '^[[:space:]]+version:[[:space:]]+.*inputs\.version' actions/mkdocs-deploy/action.yml)
