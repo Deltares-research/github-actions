@@ -103,7 +103,7 @@ runs:
 
     - name: Setup Python Environment (uv)
       if: inputs.package-manager == 'uv'
-      uses: Deltares-research/github-actions/actions/python-setup/uv@main
+      uses: Deltares-research/github-actions/actions/python-setup/uv@uv/v1.1.0
       with:
         python-version: ${{ inputs.python-version }}
         version: ${{ inputs.version }}
@@ -112,7 +112,7 @@ runs:
 
     - name: Setup Python Environment (poetry)
       if: inputs.package-manager == 'poetry'
-      uses: Deltares-research/github-actions/actions/python-setup/poetry@main
+      uses: Deltares-research/github-actions/actions/python-setup/poetry@poetry/v1.1.0
       with:
         python-version: ${{ inputs.python-version }}
         version: ${{ inputs.version }}
@@ -121,7 +121,7 @@ runs:
 
     - name: Setup Python Environment (pixi)
       if: inputs.package-manager == 'pixi'
-      uses: Deltares-research/github-actions/actions/python-setup/pixi@main
+      uses: Deltares-research/github-actions/actions/python-setup/pixi@pixi/v1.1.0
       with:
         version: ${{ inputs.version }}
         environments: ${{ inputs.pixi-environments }}
@@ -457,7 +457,7 @@ runs:
 
     - name: Publish GitHub Release
       if: inputs.skip-github-release != 'true'
-      uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+      uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
       with:
         token: ${{ inputs.github-token }}
         name: ${{ steps.bump_version.outputs.NEW_VERSION }}
