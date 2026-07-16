@@ -141,6 +141,16 @@ See [docs/versioning.md](docs/versioning.md) for the full guide, including the r
    git push origin uv/v1 --force
    ```
 
-4. For a breaking change, create a **new** major tag instead of moving the old one (`uv/v2`).
+4. Refresh the [Latest releases](#latest-releases) table, which is generated from the tags and is now a
+   release behind. Do this on `main` right after pushing the tag — consumers pin the SHAs from that table,
+   and CI fails until it matches:
+
+   ```bash
+   .github/workflows/scripts/generate-releases-table.sh --write
+   git commit -am "docs(readme): refresh releases table for uv/v1.1.0"
+   git push origin main
+   ```
+
+5. For a breaking change, create a **new** major tag instead of moving the old one (`uv/v2`).
 
 See [docs/versioning.md](docs/versioning.md) for the complete release procedure.
