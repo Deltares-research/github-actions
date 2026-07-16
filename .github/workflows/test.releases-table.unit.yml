@@ -1,0 +1,156 @@
+name: releases-table - unit
+
+# Unit tests for .github/workflows/scripts/generate-releases-table.sh.
+#
+# The script guards the SHAs consumers pin, and it had two defects that only
+# execution revealed: an unreachable no-tags branch that killed the run with an
+# empty log, and a check that could never go green on a tag push. Assertions, not
+# inspection, are what caught those -- so they live here.
+#
+# The checkout is disposable, so tests mutate README/actions in place and restore
+# with `git checkout --`.
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/scripts/generate-releases-table.sh'
+      - '.github/workflows/test.releases-table.unit.yml'
+      - 'README.md'
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  SCRIPT: .github/workflows/scripts/generate-releases-table.sh
+
+jobs:
+  test:
+    name: generate-releases-table.sh
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # The script reads `git tag -l` / `git rev-list`; a shallow checkout has
+          # no tags and would render an empty table.
+          fetch-depth: 0
+
+      - name: --check exits 0 when the table matches the tags
+        run: |
+          bash "$SCRIPT" --check
+          echo "[OK] happy path green"
+
+      - name: --print output matches the table committed in README
+        run: |
+          bash "$SCRIPT" --print > /tmp/printed.md
+          # Extract the committed table from between the markers.
+          awk '/BEGIN GENERATED: latest-releases/{f=1;next} /END GENERATED: latest-releases/{f=0} f' \
+            README.md > /tmp/committed.md
+          diff -u /tmp/committed.md /tmp/printed.md
+          echo "[OK] --print matches README"
+
+      - name: --check exits 1 and prints a diff when the table is stale
+        run: |
+          sed -i 's#`latex/v1\.0\.1`#`latex/v9.9.9`#' README.md
+          set +e
+          out=$(bash "$SCRIPT" --check 2>&1); rc=$?
+          set -e
+          git checkout -- README.md
+          [ "$rc" -eq 1 ] || { echo "::error::expected exit 1, got $rc"; exit 1; }
+          echo "$out" | grep -q 'out of date' || { echo "::error::no 'out of date' message"; exit 1; }
+          echo "$out" | grep -q '^+.*latex/v1\.0\.1' || { echo "::error::diff did not show the correction"; exit 1; }
+          echo "[OK] stale table -> exit 1 with an actionable diff"
+
+      - name: an action with no tags renders _unreleased_ instead of dying
+        run: |
+          # Regression test for the unreachable no-tags branch: pipefail + a
+          # non-matching grep used to abort the script with exit 1 and no output.
+          cp "$SCRIPT" /tmp/with-untagged.sh
+          sed -i 's#"actions/release/latex-manual|latex"#"actions/release/latex-manual|latex"\n  "actions/brand-new|brandnew"#' \
+            /tmp/with-untagged.sh
+          mkdir -p actions/brand-new && touch actions/brand-new/action.yml
+          set +e
+          out=$(bash /tmp/with-untagged.sh --print 2>&1); rc=$?
+          set -e
+          rm -rf actions/brand-new
+          [ "$rc" -eq 0 ] || { echo "::error::expected exit 0, got $rc"; echo "$out"; exit 1; }
+          echo "$out" | grep -q '_unreleased_' || { echo "::error::no _unreleased_ row"; echo "$out"; exit 1; }
+          echo "[OK] untagged action renders _unreleased_"
+
+      - name: an action on disk with no REGISTRY row fails the run
+        run: |
+          mkdir -p actions/ghost && touch actions/ghost/action.yml
+          set +e
+          out=$(bash "$SCRIPT" --check 2>&1); rc=$?
+          set -e
+          rm -rf actions/ghost
+          [ "$rc" -eq 2 ] || { echo "::error::expected exit 2, got $rc"; exit 1; }
+          echo "$out" | grep -q 'actions/ghost' || { echo "::error::did not name the unregistered action"; exit 1; }
+          echo "[OK] unregistered action is caught, not silently omitted"
+
+      - name: --write is idempotent and touches nothing when already fresh
+        run: |
+          bash "$SCRIPT" --write
+          git diff --quiet -- README.md || { echo "::error::--write dirtied an up-to-date README"; exit 1; }
+          bash "$SCRIPT" --write | grep -q 'already up to date' \
+            || { echo "::error::second --write was not a no-op"; exit 1; }
+          echo "[OK] --write idempotent"
+
+      - name: --write repairs a stale table and only the marker block
+        run: |
+          sed -i 's#`latex/v1\.0\.1`#`latex/v9.9.9`#' README.md
+          bash "$SCRIPT" --write
+          git diff --quiet -- README.md || { echo "::error::--write did not restore the table"; exit 1; }
+          bash "$SCRIPT" --check
+          echo "[OK] --write repairs drift"
+
+      - name: duplicate markers are rejected
+        run: |
+          awk '/BEGIN GENERATED: latest-releases/{print; print; next}1' README.md > /tmp/dup.md
+          cp /tmp/dup.md README.md
+          set +e
+          out=$(bash "$SCRIPT" --check 2>&1); rc=$?
+          set -e
+          git checkout -- README.md
+          [ "$rc" -eq 2 ] || { echo "::error::expected exit 2, got $rc"; exit 1; }
+          echo "$out" | grep -q 'exactly one of each' || { echo "::error::wrong message: $out"; exit 1; }
+          echo "[OK] duplicate markers rejected"
+
+      - name: inverted markers are rejected
+        run: |
+          sed -i 's/<!-- BEGIN GENERATED: latest-releases -->/@@B@@/; \
+                  s/<!-- END GENERATED: latest-releases -->/<!-- BEGIN GENERATED: latest-releases -->/; \
+                  s/@@B@@/<!-- END GENERATED: latest-releases -->/' README.md
+          set +e
+          out=$(bash "$SCRIPT" --check 2>&1); rc=$?
+          set -e
+          git checkout -- README.md
+          [ "$rc" -eq 2 ] || { echo "::error::expected exit 2, got $rc"; exit 1; }
+          echo "$out" | grep -q 'must precede' || { echo "::error::wrong message: $out"; exit 1; }
+          echo "[OK] inverted markers rejected"
+
+      - name: missing markers are rejected
+        run: |
+          sed -i '/GENERATED: latest-releases/d' README.md
+          set +e
+          out=$(bash "$SCRIPT" --check 2>&1); rc=$?
+          set -e
+          git checkout -- README.md
+          [ "$rc" -eq 2 ] || { echo "::error::expected exit 2, got $rc"; exit 1; }
+          echo "[OK] missing markers rejected"
+
+      - name: an unknown mode exits non-zero with usage
+        run: |
+          set +e
+          out=$(bash "$SCRIPT" --bogus 2>&1); rc=$?
+          set -e
+          [ "$rc" -eq 2 ] || { echo "::error::expected exit 2, got $rc"; exit 1; }
+          echo "$out" | grep -q 'usage:' || { echo "::error::no usage message"; exit 1; }
+          echo "[OK] unknown mode rejected"
+
+      - name: README is unchanged after the suite
+        run: |
+          git diff --exit-code -- README.md
+          echo "[OK] no test leaked state into README"
