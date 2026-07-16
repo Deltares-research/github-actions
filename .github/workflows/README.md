@@ -48,6 +48,28 @@ Examples:
 
   Every job uses **[test-helpers/setup-fake-remote](test-helpers/setup-fake-remote/action.yml)** to repoint `origin` at `/tmp/fake-remote.git` before the action runs, so `mike deploy --push` never reaches github.com.
 
+### Releases Table
+
+- **[ci.releases-table.yml](ci.releases-table.yml)**: asserts the README "Latest releases" table still matches the
+  git tags, via `scripts/generate-releases-table.sh --check`. **Manual only** (`gh workflow run
+  ci.releases-table.yml`) — run it after a release, or before pointing a consumer at a SHA. Refreshing the table
+  is a step of the release procedure (see [docs/versioning.md](../../docs/versioning.md)); that procedure, not
+  this job, is what keeps the table honest, so nothing fires automatically if the step is skipped.
+  It is deliberately not triggered on tag pushes either: the table records the commit a tag resolves to, so the
+  tagged commit can never contain its own row and such a run could never be green.
+
+- **[test.releases-table.unit.yml](test.releases-table.unit.yml)**: unit tests for
+  **[scripts/generate-releases-table.sh](scripts/generate-releases-table.sh)**
+  - `--check` is green when fresh; `--print` matches the committed block
+  - a wrong pinned **SHA** is caught with an actionable diff (tag-independent, so a release cannot make the suite
+    red or, worse, silently vacuous)
+  - an action with no tags renders `_unreleased_` rather than aborting
+  - the registry is **derived** from `docs/versioning.md`, proven by editing it and watching the table follow
+  - an action on disk with no registry row fails the run instead of being silently omitted
+  - `--write` is idempotent and repairs drift
+  - duplicate, inverted, missing, and **indented** markers all exit 2 (the last is a regression test: a marker
+    validated as a substring but spliced on an exact line made `--check` a silent no-op)
+
   Helper assertion scripts under [scripts/](scripts/):
   - `assert-gh-pages-has-version.sh <version>` — confirms mike wrote the named version to fake gh-pages
   - `assert-no-gh-pages-push.sh` — confirms gh-pages still at the seed commit
