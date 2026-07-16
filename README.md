@@ -68,7 +68,7 @@ steps:
 | `actions/python-setup/uv`      | `uv`             |
 | `actions/python-setup/poetry`  | `poetry`         |
 | `actions/python-setup/pixi`    | `pixi`           |
-| `actions/mkdocs-deploy`        | `mkdocs`         |
+| `actions/mkdocs-deploy`        | `mkdocs-deploy`  |
 | `actions/release/github`       | `github-release` |
 | `actions/release/latex-manual` | `latex`          |
 
@@ -92,9 +92,8 @@ release.
 | `actions/release/latex-manual` | `latex/v1.0.1`          | `e40b79ba9ee2e6d8d16dde4610f02c3a5af9de5a` |
 <!-- END GENERATED: latest-releases -->
 
-<!-- Regenerate this table with: .github/scripts/generate-releases-table.sh --write -->
-<!-- CI checks it with: .github/scripts/generate-releases-table.sh --check -->
-
+<!-- Regenerate this table with: .github/workflows/scripts/generate-releases-table.sh --write -->
+<!-- CI checks it with: .github/workflows/scripts/generate-releases-table.sh --check -->
 
 Pin in a consumer workflow by appending the SHA and keeping the version in a trailing comment:
 
@@ -102,11 +101,8 @@ Pin in a consumer workflow by appending the SHA and keeping the version in a tra
 - uses: Deltares-research/github-actions/actions/release/github@e40b79ba9ee2e6d8d16dde4610f02c3a5af9de5a # github-release/v1.2.0
 ```
 
-**Note on `mkdocs-deploy`:** its published tags use the `mkdocs-deploy/*` prefix, not the `mkdocs` namespace
-listed in the registry above. Pin against `mkdocs-deploy/*` until the namespaces are reconciled.
-
 > Legacy duplicate tags from early tagging also exist (`python-setup/<pm>/*`, `release/github/*`). Prefer the
-> short namespaces in the table above.
+> namespaces in the table above.
 
 ### Reference patterns
 
