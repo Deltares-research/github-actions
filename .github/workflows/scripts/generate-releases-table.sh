@@ -11,7 +11,7 @@
 #   generate-releases-table.sh --write    # rewrite the table block in README.md
 #   generate-releases-table.sh --check    # exit 1 if README.md is out of date
 #
-# --check is what CI runs; it prints a diff of expected vs actual.
+# --check is what CI runs; it prints a diff of actual (README) vs expected.
 #
 # Requires: git, with tags fetched (git fetch --tags).
 set -euo pipefail
@@ -30,9 +30,10 @@ trap cleanup EXIT
 
 # Registry: <action directory>|<tag namespace>
 #
-# The namespace is the tag prefix that is ACTUALLY published, which is not always
-# the short name in docs/versioning.md (mkdocs-deploy vs mkdocs). Add a row here
-# when a new action gets its first tag.
+# Mirrors the namespace registry in docs/versioning.md, which is the source of
+# truth. Add a row here when a new action gets its first tag -- assert_registry
+# below fails the run if this list and the actions on disk disagree, so a new
+# action cannot be silently omitted from the table.
 #
 # Cells must stay ASCII: printf pads by byte, so a multi-byte character (e.g. a
 # footnote superscript) would silently misalign the column. Footnotes live in the
@@ -47,13 +48,55 @@ REGISTRY=(
   "actions/release/latex-manual|latex"
 )
 
-# Newest vX.Y.Z tag for a namespace. Excludes the floating major tag (<ns>/v1),
-# which is force-pushed and therefore not a stable thing to advertise.
+# Every directory holding an action.yml must have a REGISTRY row. Without this the
+# table drifts in a new way: add an action, tag it, and --check still passes while
+# the action never appears in the README -- a missing row is more invisible than a
+# wrong SHA, which is the failure this script exists to prevent.
+assert_registry() {
+  # Explicit `=()` init, not a bare `local -a`: the latter leaves the array unset
+  # until first assignment, so `${#missing[@]}` trips `set -u` on the happy path
+  # (when nothing is missing) and kills the run.
+  local -a on_disk=() registered=() missing=()
+  local dir entry
+
+  mapfile -t on_disk < <(find "$REPO_ROOT/actions" -name action.yml -print0 \
+    | xargs -0 -n1 dirname \
+    | sed "s#^$REPO_ROOT/##" \
+    | sort)
+
+  for entry in "${REGISTRY[@]}"; do registered+=("${entry%%|*}"); done
+
+  for dir in "${on_disk[@]}"; do
+    case " ${registered[*]} " in
+      *" $dir "*) ;;
+      *) missing+=("$dir") ;;
+    esac
+  done
+
+  if [ ${#missing[@]} -gt 0 ]; then
+    echo "error: these actions have no REGISTRY row in $0:" >&2
+    printf '  %s\n' "${missing[@]}" >&2
+    echo "Add a row (\"<dir>|<tag namespace>\") so the action appears in the table." >&2
+    exit 2
+  fi
+}
+
+# Newest vX.Y.Z tag for a namespace, or empty when the action has no release yet.
+#
+# Only bare X.Y.Z is matched, which deliberately excludes both the floating major
+# tag (<ns>/v1, force-pushed and so not a stable thing to advertise) and
+# prereleases (<ns>/v1.0.0b1) -- the table advertises the newest stable release.
+#
+# `|| true` on the pipeline is load-bearing: with `pipefail`, a non-matching grep
+# fails the whole pipeline, and under `set -e` that would abort the script on the
+# assignment instead of returning empty -- making the no-tags branch below
+# unreachable and killing the run with no output at all.
 latest_tag() {
   git tag -l "$1/v*" \
     | grep -E "^$1/v[0-9]+\.[0-9]+\.[0-9]+$" \
     | sort -V \
-    | tail -1
+    | tail -1 \
+    || true
 }
 
 build_table() {
@@ -96,16 +139,38 @@ build_table() {
   done
 }
 
+# Assert exactly one of each marker, in the right order. Checking only that both
+# exist somewhere is not enough: duplicated markers make the awk splice insert the
+# table twice, and an inverted pair makes it emit a mangled README -- both
+# silently, and --write would then commit the damage.
 require_markers() {
-  grep -qF "$BEGIN_MARKER" "$README" && grep -qF "$END_MARKER" "$README" && return 0
-  echo "error: README.md is missing the generated-block markers:" >&2
-  echo "  $BEGIN_MARKER" >&2
-  echo "  $END_MARKER" >&2
-  exit 2
+  local begin_count end_count begin_line end_line
+  begin_count=$(grep -cF "$BEGIN_MARKER" "$README" || true)
+  end_count=$(grep -cF "$END_MARKER" "$README" || true)
+
+  if [ "$begin_count" -ne 1 ] || [ "$end_count" -ne 1 ]; then
+    echo "error: README.md must contain exactly one of each generated-block marker" >&2
+    echo "  found $begin_count x '$BEGIN_MARKER'" >&2
+    echo "  found $end_count x '$END_MARKER'" >&2
+    exit 2
+  fi
+
+  begin_line=$(grep -nF "$BEGIN_MARKER" "$README" | cut -d: -f1)
+  end_line=$(grep -nF "$END_MARKER" "$README" | cut -d: -f1)
+  if [ "$begin_line" -ge "$end_line" ]; then
+    echo "error: the BEGIN marker must precede the END marker in README.md" >&2
+    echo "  BEGIN at line $begin_line, END at line $end_line" >&2
+    exit 2
+  fi
 }
 
 # Splice the freshly built table between the markers, leaving everything else
 # (prose, footnotes, pin example) untouched.
+#
+# Read/write are deliberately asymmetric: CR is stripped from every line so a CRLF
+# working tree does not read as "every line changed", which means output is always
+# LF. With core.autocrlf git normalizes to LF on commit anyway, so this only
+# affects the working copy.
 render_readme() {
   awk -v begin="$BEGIN_MARKER" -v end="$END_MARKER" -v tf="$TABLE_FILE" '
     { sub(/\r$/, "") }                 # tolerate a CRLF working tree (Windows)
@@ -123,6 +188,7 @@ same_ignoring_eol() {
 
 main() {
   local mode=${1:---print}
+  assert_registry
   require_markers
 
   TABLE_FILE=$(mktemp)
@@ -148,7 +214,7 @@ main() {
       if same_ignoring_eol "$EXPECTED" "$README"; then
         echo "[OK] README.md releases table is up to date."
       else
-        echo "::error::README.md releases table is out of date. Run .github/scripts/generate-releases-table.sh --write" >&2
+        echo "::error::README.md releases table is out of date. Run .github/workflows/scripts/generate-releases-table.sh --write" >&2
         diff -u <(tr -d '\r' < "$README") <(tr -d '\r' < "$EXPECTED") >&2 || true
         exit 1
       fi
