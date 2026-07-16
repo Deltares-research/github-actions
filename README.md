@@ -143,7 +143,7 @@ See [docs/versioning.md](docs/versioning.md) for the full guide, including the r
 
 4. Refresh the [Latest releases](#latest-releases) table, which is generated from the tags and is now a
    release behind. Do this on `main` right after pushing the tag — consumers pin the SHAs from that table,
-   and CI fails until it matches:
+   and nothing else will catch a stale row:
 
    ```bash
    .github/workflows/scripts/generate-releases-table.sh --write

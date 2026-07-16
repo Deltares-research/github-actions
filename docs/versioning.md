@@ -127,13 +127,13 @@ git commit -am "docs(readme): refresh releases table for pip/v1.0.1"
 git push origin main
 ```
 
-Consumers pin the commit SHAs from that table, so a stale row sends them to an old ref. This step is the
-primary mechanism; the `releases-table - check` workflow (on every push to `main` and weekly) is only a
-backstop for when it is forgotten, and it will red-line `main` until the table is refreshed.
+Consumers pin the commit SHAs from that table, so a stale row sends them to an old ref. **This step is the only
+thing keeping the table honest** — do not skip it. The `releases-table - check` workflow is manual
+(`gh workflow run ci.releases-table.yml`), so nothing fires automatically if you forget; you can also verify
+locally with `generate-releases-table.sh --check`.
 
 Note the table can never be current *within* the tagged commit itself: the tag has to exist before the SHA it
-resolves to is known, so the refresh necessarily lands in a later commit. That is why the check deliberately
-does not run on tag pushes.
+resolves to is known, so the refresh necessarily lands in a later commit.
 
 ### 4. Create the GitHub Release
 

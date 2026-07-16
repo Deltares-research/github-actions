@@ -51,10 +51,12 @@ Examples:
 ### Releases Table
 
 - **[ci.releases-table.yml](ci.releases-table.yml)**: asserts the README "Latest releases" table still matches the
-  git tags, via `scripts/generate-releases-table.sh --check`. Runs on PRs touching the table, on every push to
-  `main`, and weekly. Deliberately **not** on tag pushes: the table records the commit a tag resolves to, so the
-  tagged commit can never contain its own row and such a run could never be green. Refreshing the table is part of
-  the release procedure (see [docs/versioning.md](../../docs/versioning.md)); this check is the backstop.
+  git tags, via `scripts/generate-releases-table.sh --check`. **Manual only** (`gh workflow run
+  ci.releases-table.yml`) — run it after a release, or before pointing a consumer at a SHA. Refreshing the table
+  is a step of the release procedure (see [docs/versioning.md](../../docs/versioning.md)); that procedure, not
+  this job, is what keeps the table honest, so nothing fires automatically if the step is skipped.
+  It is deliberately not triggered on tag pushes either: the table records the commit a tag resolves to, so the
+  tagged commit can never contain its own row and such a run could never be green.
 
 - **[test.releases-table.unit.yml](test.releases-table.unit.yml)**: unit tests for
   **[scripts/generate-releases-table.sh](scripts/generate-releases-table.sh)**
