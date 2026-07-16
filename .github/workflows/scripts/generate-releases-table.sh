@@ -28,30 +28,41 @@ EXPECTED=
 cleanup() { rm -f "$TABLE_FILE" "$EXPECTED"; }
 trap cleanup EXIT
 
-# Registry: <action directory>|<tag namespace>
+VERSIONING_DOC="$REPO_ROOT/docs/versioning.md"
+
+# REGISTRY entries are "<action directory>|<tag namespace>", parsed from the
+# namespace-registry table in docs/versioning.md.
 #
-# Mirrors the namespace registry in docs/versioning.md, which is the source of
-# truth. Add a row here when a new action gets its first tag -- assert_registry
-# below fails the run if this list and the actions on disk disagree, so a new
-# action cannot be silently omitted from the table.
+# It is DERIVED, not hand-copied. docs/versioning.md declares itself the source of
+# truth, and a second hand-maintained copy is what produced the bug this script
+# exists to prevent: README's registry said `mkdocs` while the published tags (and
+# versioning.md) said `mkdocs-deploy`. Two lists that must agree eventually do not.
 #
 # Cells must stay ASCII: printf pads by byte, so a multi-byte character (e.g. a
 # footnote superscript) would silently misalign the column. Footnotes live in the
 # prose under the table instead.
-REGISTRY=(
-  "actions/python-setup/pip|pip"
-  "actions/python-setup/uv|uv"
-  "actions/python-setup/poetry|poetry"
-  "actions/python-setup/pixi|pixi"
-  "actions/mkdocs-deploy|mkdocs-deploy"
-  "actions/release/github|github-release"
-  "actions/release/latex-manual|latex"
-)
+REGISTRY=()
 
-# Every directory holding an action.yml must have a REGISTRY row. Without this the
-# table drifts in a new way: add an action, tag it, and --check still passes while
-# the action never appears in the README -- a missing row is more invisible than a
-# wrong SHA, which is the failure this script exists to prevent.
+load_registry() {
+  local line dir ns
+  # Rows look like: | `actions/release/github` | `github-release` | `...` |
+  while IFS= read -r line; do
+    dir=$(printf '%s' "$line" | sed -E 's/^\| *`([^`]+)` *\|.*/\1/')
+    ns=$(printf '%s' "$line" | sed -E 's/^\| *`[^`]+` *\| *`([^`]+)` *\|.*/\1/')
+    [ -n "$dir" ] && [ -n "$ns" ] && REGISTRY+=("$dir|$ns")
+  done < <(grep -E '^\| *`actions/[^`]+` *\| *`[^`]+` *\|' "$VERSIONING_DOC" || true)
+
+  if [ ${#REGISTRY[@]} -eq 0 ]; then
+    echo "error: parsed no namespace rows from $VERSIONING_DOC" >&2
+    echo "The registry table there is the source of truth; has its format changed?" >&2
+    exit 2
+  fi
+}
+
+# Every directory holding an action.yml must appear in the registry. Without this
+# the table drifts in a new way: add an action, tag it, and --check still passes
+# while the action never appears in the README -- a missing row is more invisible
+# than a wrong SHA, which is the failure this script exists to prevent.
 assert_registry() {
   # Explicit `=()` init, not a bare `local -a`: the latter leaves the array unset
   # until first assignment, so `${#missing[@]}` trips `set -u` on the happy path
@@ -59,10 +70,20 @@ assert_registry() {
   local -a on_disk=() registered=() missing=()
   local dir entry
 
-  mapfile -t on_disk < <(find "$REPO_ROOT/actions" -name action.yml -print0 \
-    | xargs -0 -n1 dirname \
-    | sed "s#^$REPO_ROOT/##" \
-    | sort)
+  # `find | xargs` status is invisible to set -e through a process substitution,
+  # so an empty result is checked explicitly below rather than trusted to fail.
+  # Prefix stripping uses ${var#...} (not sed) so a path with regex metacharacters
+  # cannot corrupt the expression.
+  while IFS= read -r dir; do
+    on_disk+=("${dir#"$REPO_ROOT/"}")
+  done < <(find "$REPO_ROOT/actions" -name action.yml -exec dirname {} \; 2>/dev/null | sort)
+
+  if [ ${#on_disk[@]} -eq 0 ]; then
+    echo "error: found no actions/*/action.yml under $REPO_ROOT/actions" >&2
+    echo "Either the checkout is broken or the layout changed; refusing to render" >&2
+    echo "a table that would silently claim this repo publishes nothing." >&2
+    exit 2
+  fi
 
   for entry in "${REGISTRY[@]}"; do registered+=("${entry%%|*}"); done
 
@@ -74,9 +95,10 @@ assert_registry() {
   done
 
   if [ ${#missing[@]} -gt 0 ]; then
-    echo "error: these actions have no REGISTRY row in $0:" >&2
+    echo "error: these actions have no row in the namespace registry" >&2
+    echo "($VERSIONING_DOC):" >&2
     printf '  %s\n' "${missing[@]}" >&2
-    echo "Add a row (\"<dir>|<tag namespace>\") so the action appears in the table." >&2
+    echo "Add a row there so the action appears in the README table." >&2
     exit 2
   fi
 }
@@ -100,7 +122,7 @@ latest_tag() {
 }
 
 build_table() {
-  local -a actions versions shas
+  local -a actions=() versions=() shas=()
   local h_action="Action" h_version="Latest version" h_sha="Commit SHA (pin this)"
   local w_action=${#h_action} w_version=${#h_version} w_sha=${#h_sha}
   local entry dir ns tag sha action version
@@ -139,24 +161,34 @@ build_table() {
   done
 }
 
-# Assert exactly one of each marker, in the right order. Checking only that both
-# exist somewhere is not enough: duplicated markers make the awk splice insert the
-# table twice, and an inverted pair makes it emit a mangled README -- both
-# silently, and --write would then commit the damage.
+# Assert exactly one of each marker, on its own line, in the right order.
+#
+# The -x (whole-line) match is load-bearing and must stay in lockstep with
+# render_readme's awk, which splices on `$0 == begin`. Validating with a substring
+# match instead let an indented or trailing-space marker satisfy this function
+# while never matching in awk: the splice then no-opped, render_readme returned the
+# README verbatim, --check compared the file to itself and reported "up to date"
+# -- staying green no matter how wrong the table was. A guard that fails open is
+# worse than no guard, because CI vouches for the drift.
+#
+# Order and uniqueness matter too: duplicate markers make awk insert the table
+# twice, and an inverted pair emits a mangled README -- both silently, and --write
+# would commit the damage.
 require_markers() {
   local begin_count end_count begin_line end_line
-  begin_count=$(grep -cF "$BEGIN_MARKER" "$README" || true)
-  end_count=$(grep -cF "$END_MARKER" "$README" || true)
+  begin_count=$(grep -cxF "$BEGIN_MARKER" "$README" || true)
+  end_count=$(grep -cxF "$END_MARKER" "$README" || true)
 
   if [ "$begin_count" -ne 1 ] || [ "$end_count" -ne 1 ]; then
-    echo "error: README.md must contain exactly one of each generated-block marker" >&2
+    echo "error: README.md must contain exactly one of each generated-block marker," >&2
+    echo "each alone on its own line with no leading or trailing whitespace." >&2
     echo "  found $begin_count x '$BEGIN_MARKER'" >&2
     echo "  found $end_count x '$END_MARKER'" >&2
     exit 2
   fi
 
-  begin_line=$(grep -nF "$BEGIN_MARKER" "$README" | cut -d: -f1)
-  end_line=$(grep -nF "$END_MARKER" "$README" | cut -d: -f1)
+  begin_line=$(grep -nxF "$BEGIN_MARKER" "$README" | cut -d: -f1)
+  end_line=$(grep -nxF "$END_MARKER" "$README" | cut -d: -f1)
   if [ "$begin_line" -ge "$end_line" ]; then
     echo "error: the BEGIN marker must precede the END marker in README.md" >&2
     echo "  BEGIN at line $begin_line, END at line $end_line" >&2
@@ -188,6 +220,7 @@ same_ignoring_eol() {
 
 main() {
   local mode=${1:---print}
+  load_registry
   assert_registry
   require_markers
 
