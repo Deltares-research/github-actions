@@ -120,9 +120,11 @@ jobs:
 
       - name: inverted markers are rejected
         run: |
-          sed -i 's/<!-- BEGIN GENERATED: latest-releases -->/@@B@@/; \
-                  s/<!-- END GENERATED: latest-releases -->/<!-- BEGIN GENERATED: latest-releases -->/; \
-                  s/@@B@@/<!-- END GENERATED: latest-releases -->/' README.md
+          # Three separate invocations on purpose: a backslash continuation inside
+          # the single-quoted expression would reach sed as a literal backslash.
+          sed -i 's/<!-- BEGIN GENERATED: latest-releases -->/@@B@@/' README.md
+          sed -i 's/<!-- END GENERATED: latest-releases -->/<!-- BEGIN GENERATED: latest-releases -->/' README.md
+          sed -i 's/@@B@@/<!-- END GENERATED: latest-releases -->/' README.md
           set +e
           out=$(bash "$SCRIPT" --check 2>&1); rc=$?
           set -e
