@@ -51,33 +51,58 @@ jobs:
           diff -u /tmp/committed.md /tmp/printed.md
           echo "[OK] --print matches README"
 
-      - name: --check exits 1 and prints a diff when the table is stale
+      - name: --check exits 1 and prints a diff when a pinned SHA is wrong
         run: |
-          sed -i 's#`latex/v1\.0\.1`#`latex/v9.9.9`#' README.md
+          # Corrupt the SHA column -- the value consumers actually pin -- rather
+          # than a specific version string. Nothing here names a live tag, so a new
+          # release cannot make this test red or, worse, silently vacuous.
+          sed -i '/BEGIN GENERATED: latest-releases/,/END GENERATED: latest-releases/ s/`[0-9a-f]\{40\}`/`0000000000000000000000000000000000000000`/' README.md
+          grep -q '0000000000000000000000000000000000000000' README.md \
+            || { echo "::error::test bug: SHA corruption did not apply"; exit 1; }
           set +e
           out=$(bash "$SCRIPT" --check 2>&1); rc=$?
           set -e
           git checkout -- README.md
           [ "$rc" -eq 1 ] || { echo "::error::expected exit 1, got $rc"; exit 1; }
           echo "$out" | grep -q 'out of date' || { echo "::error::no 'out of date' message"; exit 1; }
-          echo "$out" | grep -q '^+.*latex/v1\.0\.1' || { echo "::error::diff did not show the correction"; exit 1; }
-          echo "[OK] stale table -> exit 1 with an actionable diff"
+          echo "$out" | grep -qE '^-.*`0{40}`' || { echo "::error::diff did not show the bad SHA"; exit 1; }
+          echo "$out" | grep -qE '^\+.*`[0-9a-f]{40}`' \
+            || { echo "::error::diff did not offer a real SHA"; exit 1; }
+          echo "[OK] wrong pinned SHA -> exit 1 with an actionable diff"
 
       - name: an action with no tags renders _unreleased_ instead of dying
         run: |
           # Regression test for the unreachable no-tags branch: pipefail + a
           # non-matching grep used to abort the script with exit 1 and no output.
-          cp "$SCRIPT" /tmp/with-untagged.sh
-          sed -i 's#"actions/release/latex-manual|latex"#"actions/release/latex-manual|latex"\n  "actions/brand-new|brandnew"#' \
-            /tmp/with-untagged.sh
+          # The registry is read from docs/versioning.md, so register the action
+          # there (as a real one would be) rather than patching the script.
           mkdir -p actions/brand-new && touch actions/brand-new/action.yml
+          awk '1; /^\| `actions\/release\/latex-manual`/ { print "| `actions/brand-new` | `brandnew` | `brandnew/v1.0.0` |" }' \
+            docs/versioning.md > /tmp/versioning.md
+          cp /tmp/versioning.md docs/versioning.md
           set +e
-          out=$(bash /tmp/with-untagged.sh --print 2>&1); rc=$?
+          out=$(bash "$SCRIPT" --print 2>&1); rc=$?
           set -e
           rm -rf actions/brand-new
+          git checkout -- docs/versioning.md
           [ "$rc" -eq 0 ] || { echo "::error::expected exit 0, got $rc"; echo "$out"; exit 1; }
+          echo "$out" | grep -q 'brand-new' || { echo "::error::registry row was not picked up"; echo "$out"; exit 1; }
           echo "$out" | grep -q '_unreleased_' || { echo "::error::no _unreleased_ row"; echo "$out"; exit 1; }
           echo "[OK] untagged action renders _unreleased_"
+
+      - name: the registry is derived from docs/versioning.md, not hand-copied
+        run: |
+          # A second hand-maintained copy of the namespace list is what produced
+          # the mkdocs/mkdocs-deploy bug. Prove the script reads versioning.md by
+          # changing it and observing the table follow.
+          before=$(bash "$SCRIPT" --print | grep 'release/github')
+          sed -i 's/| `github-release` |/| `renamed-ns`     |/' docs/versioning.md
+          after=$(bash "$SCRIPT" --print | grep 'release/github')
+          git checkout -- docs/versioning.md
+          [ "$before" != "$after" ] \
+            || { echo "::error::table ignored docs/versioning.md; registry is not derived"; exit 1; }
+          bash "$SCRIPT" --check
+          echo "[OK] registry follows docs/versioning.md"
 
       - name: an action on disk with no REGISTRY row fails the run
         run: |
@@ -100,7 +125,9 @@ jobs:
 
       - name: --write repairs a stale table and only the marker block
         run: |
-          sed -i 's#`latex/v1\.0\.1`#`latex/v9.9.9`#' README.md
+          sed -i '/BEGIN GENERATED: latest-releases/,/END GENERATED: latest-releases/ s/`[0-9a-f]\{40\}`/`0000000000000000000000000000000000000000`/' README.md
+          grep -q '0000000000000000000000000000000000000000' README.md \
+            || { echo "::error::test bug: SHA corruption did not apply"; exit 1; }
           bash "$SCRIPT" --write
           git diff --quiet -- README.md || { echo "::error::--write did not restore the table"; exit 1; }
           bash "$SCRIPT" --check
@@ -141,7 +168,28 @@ jobs:
           set -e
           git checkout -- README.md
           [ "$rc" -eq 2 ] || { echo "::error::expected exit 2, got $rc"; exit 1; }
+          # Assert which guard fired: rc==2 alone would also pass on an unrelated
+          # usage error, making this test vacuous.
+          echo "$out" | grep -q 'exactly one of each' || { echo "::error::wrong message: $out"; exit 1; }
           echo "[OK] missing markers rejected"
+
+      - name: an indented marker is rejected rather than silently passing
+        run: |
+          # Regression test: require_markers used to match markers as substrings
+          # while the awk splice needed an exact line, so an indented marker made
+          # --check compare README to itself and report OK -- green no matter how
+          # wrong the table was. Corrupt the SHAs too: a passing run here means the
+          # check has silently disarmed.
+          sed -i 's/^<!-- BEGIN GENERATED: latest-releases -->/  <!-- BEGIN GENERATED: latest-releases -->/' README.md
+          sed -i '/GENERATED: latest-releases/,/END GENERATED: latest-releases/ s/`[0-9a-f]\{40\}`/`0000000000000000000000000000000000000000`/' README.md
+          set +e
+          out=$(bash "$SCRIPT" --check 2>&1); rc=$?
+          set -e
+          git checkout -- README.md
+          [ "$rc" -eq 2 ] || {
+            echo "::error::indented marker must exit 2, got $rc -- the guard is failing open"; exit 1; }
+          echo "$out" | grep -q 'own line' || { echo "::error::wrong message: $out"; exit 1; }
+          echo "[OK] indented marker rejected; guard fails closed"
 
       - name: an unknown mode exits non-zero with usage
         run: |
