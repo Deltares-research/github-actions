@@ -80,28 +80,33 @@ commit SHA (not the tag) when consuming these actions — action-pinning securit
 40-character SHA. The floating major tag is force-pushed to the same commit on each backward-compatible
 release.
 
+<!-- BEGIN GENERATED: latest-releases -->
 | Action                         | Latest version          | Commit SHA (pin this)                      |
 |--------------------------------|-------------------------|--------------------------------------------|
-| `actions/python-setup/pip`     | `pip/v1.0.1`            | `d60c8767cd8efb9c42850eabac6845cbe015d772` |
-| `actions/python-setup/uv`      | `uv/v1.0.1`             | `d60c8767cd8efb9c42850eabac6845cbe015d772` |
-| `actions/python-setup/poetry`  | `poetry/v1.0.1`         | `d60c8767cd8efb9c42850eabac6845cbe015d772` |
-| `actions/python-setup/pixi`    | `pixi/v1.0.1`           | `d60c8767cd8efb9c42850eabac6845cbe015d772` |
-| `actions/mkdocs-deploy`        | `mkdocs-deploy/v1.0.1`¹ | `b655376b4a9c0b0b37f7f730f840f11c7220d1a6` |
-| `actions/release/github`       | `github-release/v1.1.4` | `73618deb1feaffe481d69063ce7bf229fab6598b` |
-| `actions/release/latex-manual` | `latex/v1.0.0`          | `b145fdb7af62c9a3c204af3450c3aeb52f2754cf` |
+| `actions/python-setup/pip`     | `pip/v1.1.0`            | `0d76ad54ebc4c8bde82105ac863de1ec841544f1` |
+| `actions/python-setup/uv`      | `uv/v1.1.0`             | `0d76ad54ebc4c8bde82105ac863de1ec841544f1` |
+| `actions/python-setup/poetry`  | `poetry/v1.1.0`         | `0d76ad54ebc4c8bde82105ac863de1ec841544f1` |
+| `actions/python-setup/pixi`    | `pixi/v1.1.0`           | `0d76ad54ebc4c8bde82105ac863de1ec841544f1` |
+| `actions/mkdocs-deploy`        | `mkdocs-deploy/v1.1.0`  | `e40b79ba9ee2e6d8d16dde4610f02c3a5af9de5a` |
+| `actions/release/github`       | `github-release/v1.2.0` | `e40b79ba9ee2e6d8d16dde4610f02c3a5af9de5a` |
+| `actions/release/latex-manual` | `latex/v1.0.1`          | `e40b79ba9ee2e6d8d16dde4610f02c3a5af9de5a` |
+<!-- END GENERATED: latest-releases -->
+
+<!-- Regenerate this table with: .github/scripts/generate-releases-table.sh --write -->
+<!-- CI checks it with: .github/scripts/generate-releases-table.sh --check -->
+
 
 Pin in a consumer workflow by appending the SHA and keeping the version in a trailing comment:
 
 ```yaml
-- uses: Deltares-research/github-actions/actions/release/github@73618deb1feaffe481d69063ce7bf229fab6598b # github-release/v1.1.4
+- uses: Deltares-research/github-actions/actions/release/github@e40b79ba9ee2e6d8d16dde4610f02c3a5af9de5a # github-release/v1.2.0
 ```
 
-¹ Published tags use the `mkdocs-deploy/*` prefix, not the `mkdocs` namespace listed in the registry above.
-  Pin against `mkdocs-deploy/*` until the namespaces are reconciled.
+**Note on `mkdocs-deploy`:** its published tags use the `mkdocs-deploy/*` prefix, not the `mkdocs` namespace
+listed in the registry above. Pin against `mkdocs-deploy/*` until the namespaces are reconciled.
 
 > Legacy duplicate tags from early tagging also exist (`python-setup/<pm>/*`, `release/github/*`). Prefer the
-> short namespaces in the table above. To regenerate this table, resolve each namespace's newest
-> `vX.Y.Z` tag with `git rev-list -n 1 <tag>`.
+> short namespaces in the table above.
 
 ### Reference patterns
 
