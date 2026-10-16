@@ -316,6 +316,9 @@ jobs:
       - name: Run action with cache-write enabled
         uses: ./actions/python-setup/poetry
         with:
+          # Pin the same version the verify step resolves, so the action's save
+          # key matches regardless of the action's default python-version.
+          python-version: '3.12'
           cache-write: 'true'
 
       - name: Wait for cache propagation
@@ -362,6 +365,9 @@ jobs:
       - name: Run action with cache-write disabled
         uses: ./actions/python-setup/poetry
         with:
+          # Pin the same version the verify step resolves, so the action's save
+          # key matches regardless of the action's default python-version.
+          python-version: '3.12'
           cache-write: 'false'
 
       - name: Look up cache after action ran
