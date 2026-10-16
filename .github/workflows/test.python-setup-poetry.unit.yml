@@ -304,9 +304,21 @@ jobs:
           cp tests/data/poetry/defaults/poetry.lock ./poetry.lock
           sed -i "1i # test-run-${{ github.run_id }}-write-true" poetry.lock
 
+      # Resolve the same Python patch the action will, so the verify key below
+      # matches what the action saves under (the action keys on the resolved
+      # patch version, not the coarse python-version input).
+      - name: Resolve Python patch version
+        id: setup-python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.12'
+
       - name: Run action with cache-write enabled
         uses: ./actions/python-setup/poetry
         with:
+          # Pin the same version the verify step resolves, so the action's save
+          # key matches regardless of the action's default python-version.
+          python-version: '3.12'
           cache-write: 'true'
 
       - name: Wait for cache propagation
@@ -319,16 +331,26 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: ~/.virtualenvs
-          key: poetry-${{ runner.os }}-py3.12-poetry2.4.1-${{ hashFiles('**/poetry.lock') }}
+          key: poetry-${{ runner.os }}-py${{ steps.setup-python.outputs.python-version }}-poetry2.4.1-${{ hashFiles('**/poetry.lock') }}
           lookup-only: true
 
       - name: Assert cache was saved
         run: |
+          # Guard issue #14's actual contract: the key must carry the Python
+          # *patch* (3.12.<n>), not the coarse minor — otherwise a runner patch
+          # bump would not bust the cache. A revert to a coarse key fails here
+          # even though save/verify would still agree.
+          RESOLVED="${{ steps.setup-python.outputs.python-version }}"
+          echo "Resolved Python version embedded in the cache key: $RESOLVED"
+          if ! printf '%s' "$RESOLVED" | grep -qE '^3\.12\.[0-9]+$'; then
+            echo "::error::cache key is not patch-granular (expected 3.12.<patch>, got '$RESOLVED') — issue #14 regression"
+            exit 1
+          fi
           if [ "${{ steps.verify.outputs.cache-hit }}" != "true" ]; then
             echo "::error::cache-write=true should have saved cache, but key was not found"
             exit 1
           fi
-          echo "Cache was correctly saved"
+          echo "Cache was correctly saved under a patch-granular key"
 
   cache-write-false-skips-save:
     name: cache-write=false skips cache save
@@ -342,9 +364,23 @@ jobs:
           cp tests/data/poetry/defaults/poetry.lock ./poetry.lock
           sed -i "1i # test-run-${{ github.run_id }}-write-false" poetry.lock
 
+      # Build the lookup key the action *would* save under (same resolved
+      # patch), so that if cache-write=false ever wrongly saved a venv, the
+      # "not found" assertion below would catch it. In this negative case the
+      # key only has to match the action's real key; its format is not
+      # re-validated here (the cache-write=true job does that).
+      - name: Resolve Python patch version
+        id: setup-python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.12'
+
       - name: Run action with cache-write disabled
         uses: ./actions/python-setup/poetry
         with:
+          # Pin the same version the verify step resolves, so the action's save
+          # key matches regardless of the action's default python-version.
+          python-version: '3.12'
           cache-write: 'false'
 
       - name: Look up cache after action ran
@@ -352,7 +388,7 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: ~/.virtualenvs
-          key: poetry-${{ runner.os }}-py3.12-poetry2.4.1-${{ hashFiles('**/poetry.lock') }}
+          key: poetry-${{ runner.os }}-py${{ steps.setup-python.outputs.python-version }}-poetry2.4.1-${{ hashFiles('**/poetry.lock') }}
           lookup-only: true
 
       - name: Assert cache was NOT saved
