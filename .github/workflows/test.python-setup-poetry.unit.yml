@@ -364,8 +364,11 @@ jobs:
           cp tests/data/poetry/defaults/poetry.lock ./poetry.lock
           sed -i "1i # test-run-${{ github.run_id }}-write-false" poetry.lock
 
-      # Resolve the same Python patch the action will, so the verify key below
-      # matches the action's key format (resolved patch, not the coarse input).
+      # Build the lookup key the action *would* save under (same resolved
+      # patch), so that if cache-write=false ever wrongly saved a venv, the
+      # "not found" assertion below would catch it. In this negative case the
+      # key only has to match the action's real key; its format is not
+      # re-validated here (the cache-write=true job does that).
       - name: Resolve Python patch version
         id: setup-python
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
