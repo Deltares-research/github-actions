@@ -304,6 +304,15 @@ jobs:
           cp tests/data/poetry/defaults/poetry.lock ./poetry.lock
           sed -i "1i # test-run-${{ github.run_id }}-write-true" poetry.lock
 
+      # Resolve the same Python patch the action will, so the verify key below
+      # matches what the action saves under (the action keys on the resolved
+      # patch version, not the coarse python-version input).
+      - name: Resolve Python patch version
+        id: setup-python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.12'
+
       - name: Run action with cache-write enabled
         uses: ./actions/python-setup/poetry
         with:
@@ -319,7 +328,7 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: ~/.virtualenvs
-          key: poetry-${{ runner.os }}-py3.12-poetry2.4.1-${{ hashFiles('**/poetry.lock') }}
+          key: poetry-${{ runner.os }}-py${{ steps.setup-python.outputs.python-version }}-poetry2.4.1-${{ hashFiles('**/poetry.lock') }}
           lookup-only: true
 
       - name: Assert cache was saved
@@ -342,6 +351,14 @@ jobs:
           cp tests/data/poetry/defaults/poetry.lock ./poetry.lock
           sed -i "1i # test-run-${{ github.run_id }}-write-false" poetry.lock
 
+      # Resolve the same Python patch the action will, so the verify key below
+      # matches the action's key format (resolved patch, not the coarse input).
+      - name: Resolve Python patch version
+        id: setup-python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.12'
+
       - name: Run action with cache-write disabled
         uses: ./actions/python-setup/poetry
         with:
@@ -352,7 +369,7 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: ~/.virtualenvs
-          key: poetry-${{ runner.os }}-py3.12-poetry2.4.1-${{ hashFiles('**/poetry.lock') }}
+          key: poetry-${{ runner.os }}-py${{ steps.setup-python.outputs.python-version }}-poetry2.4.1-${{ hashFiles('**/poetry.lock') }}
           lookup-only: true
 
       - name: Assert cache was NOT saved
