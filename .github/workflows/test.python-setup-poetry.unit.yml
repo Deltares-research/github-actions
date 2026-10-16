@@ -336,11 +336,21 @@ jobs:
 
       - name: Assert cache was saved
         run: |
+          # Guard issue #14's actual contract: the key must carry the Python
+          # *patch* (3.12.<n>), not the coarse minor — otherwise a runner patch
+          # bump would not bust the cache. A revert to a coarse key fails here
+          # even though save/verify would still agree.
+          RESOLVED="${{ steps.setup-python.outputs.python-version }}"
+          echo "Resolved Python version embedded in the cache key: $RESOLVED"
+          if ! printf '%s' "$RESOLVED" | grep -qE '^3\.12\.[0-9]+$'; then
+            echo "::error::cache key is not patch-granular (expected 3.12.<patch>, got '$RESOLVED') — issue #14 regression"
+            exit 1
+          fi
           if [ "${{ steps.verify.outputs.cache-hit }}" != "true" ]; then
             echo "::error::cache-write=true should have saved cache, but key was not found"
             exit 1
           fi
-          echo "Cache was correctly saved"
+          echo "Cache was correctly saved under a patch-granular key"
 
   cache-write-false-skips-save:
     name: cache-write=false skips cache save
