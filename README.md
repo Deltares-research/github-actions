@@ -54,7 +54,7 @@ steps:
   - uses: actions/checkout@v4
 
   - name: Setup Python with uv
-    uses: Deltares-research/github-actions/actions/python-setup/uv@uv/v1
+    uses: Deltares-research/github-actions/actions/python-setup/uv@uv/v1.1.0
     with:
       python-version: '3.12'
       install-groups: dev
@@ -68,25 +68,24 @@ steps:
 | `actions/python-setup/uv`      | `uv`             |
 | `actions/python-setup/poetry`  | `poetry`         |
 | `actions/python-setup/pixi`    | `pixi`           |
-| `actions/mkdocs-deploy`        | `mkdocs`         |
+| `actions/mkdocs-deploy`        | `mkdocs-deploy`  |
 | `actions/release/github`       | `github-release` |
 | `actions/release/latex-manual` | `latex`          |
 
 ### Latest releases
 
 The latest released version of each action and the **full commit SHA** it resolves to. Pin against the
-commit SHA (not the tag) when consuming these actions — action-pinning security scanners
-(e.g. StepSecurity Harden-Runner, OpenSSF Scorecard) flag floating tags and require an immutable
-40-character SHA. The floating major tag is force-pushed to the same commit on each backward-compatible
-release.
+commit SHA, or the exact `<namespace>/vX.Y.Z` tag, when consuming these actions — action-pinning security
+scanners (e.g. StepSecurity Harden-Runner, OpenSSF Scorecard) flag floating tags and require an immutable
+40-character SHA. This repo publishes **immutable tags only** — there are no floating major tags to track.
 
 | Action                         | Latest version          | Commit SHA (pin this)                      |
 |--------------------------------|-------------------------|--------------------------------------------|
 | `actions/python-setup/pip`     | `pip/v1.0.1`            | `d60c8767cd8efb9c42850eabac6845cbe015d772` |
 | `actions/python-setup/uv`      | `uv/v1.0.1`             | `d60c8767cd8efb9c42850eabac6845cbe015d772` |
-| `actions/python-setup/poetry`  | `poetry/v1.0.1`         | `d60c8767cd8efb9c42850eabac6845cbe015d772` |
+| `actions/python-setup/poetry`  | `poetry/v1.1.1`         | `5f559b0cb3bf70f719cd00eba8938ac15b433738` |
 | `actions/python-setup/pixi`    | `pixi/v1.0.1`           | `d60c8767cd8efb9c42850eabac6845cbe015d772` |
-| `actions/mkdocs-deploy`        | `mkdocs-deploy/v1.0.1`¹ | `b655376b4a9c0b0b37f7f730f840f11c7220d1a6` |
+| `actions/mkdocs-deploy`        | `mkdocs-deploy/v1.0.1`  | `b655376b4a9c0b0b37f7f730f840f11c7220d1a6` |
 | `actions/release/github`       | `github-release/v1.1.4` | `73618deb1feaffe481d69063ce7bf229fab6598b` |
 | `actions/release/latex-manual` | `latex/v1.0.0`          | `b145fdb7af62c9a3c204af3450c3aeb52f2754cf` |
 
@@ -96,31 +95,23 @@ Pin in a consumer workflow by appending the SHA and keeping the version in a tra
 - uses: Deltares-research/github-actions/actions/release/github@73618deb1feaffe481d69063ce7bf229fab6598b # github-release/v1.1.4
 ```
 
-¹ Published tags use the `mkdocs-deploy/*` prefix, not the `mkdocs` namespace listed in the registry above.
-  Pin against `mkdocs-deploy/*` until the namespaces are reconciled.
-
 > Legacy duplicate tags from early tagging also exist (`python-setup/<pm>/*`, `release/github/*`). Prefer the
 > short namespaces in the table above. To regenerate this table, resolve each namespace's newest
 > `vX.Y.Z` tag with `git rev-list -n 1 <tag>`.
 
 ### Reference patterns
 
-| Pattern         | Example      | When to use                                                          |
-|-----------------|--------------|----------------------------------------------------------------------|
-| Floating major  | `@uv/v1`     | CI/CD, everyday workflows — auto-picks up patches and minor releases |
-| Pinned specific | `@uv/v1.0.0` | Production, compliance, security-critical workflows                  |
-| Branch          | `@main`      | Testing unreleased changes only — **not** for production             |
+| Pattern        | Example          | When to use                                                        |
+|----------------|------------------|--------------------------------------------------------------------|
+| Pinned version | `@uv/v1.1.0`     | All workflows — the only supported release pin (bump deliberately) |
+| Commit SHA     | `@<40-char-sha>` | Strictest supply-chain pinning; what action scanners require       |
+| Branch         | `@main`          | Testing unreleased changes only — **not** for production           |
 
 ## Versioning
 
 This repository uses **namespaced versioning**: every action has its own independent version tags, so a release of one action never affects the others.
 
-For each action, two tags are maintained:
-
-- **Specific version** (immutable) — e.g. `uv/v1.0.0`. Never moves.
-- **Floating major** — e.g. `uv/v1`. Force-pushed forward as new backward-compatible releases land within the same major.
-
-A breaking change creates a new major (`uv/v2`) and leaves the old major tag where it was, so existing consumers keep working.
+Every tag is an **immutable specific version** — e.g. `uv/v1.1.0` — that points at one commit and is never moved or deleted. This repo publishes **no floating major tags** (`uv/v1`): a floating tag silently changes under consumers, so a pin would not be reproducible — the same reason the `mkdocs-deploy` and `release/github` wrappers pin their internal `python-setup` composition to exact versions. A breaking change cuts a new `uv/v2.0.0` and leaves the older `uv/v1.x.x` tags untouched, so existing consumers keep working until they migrate.
 
 See [docs/versioning.md](docs/versioning.md) for the full guide, including the release process, the automated release workflow, and worked examples.
 
@@ -131,15 +122,11 @@ See [docs/versioning.md](docs/versioning.md) for the full guide, including the r
 3. Tag the new version with the action's namespace and push:
 
    ```bash
-   # Specific (immutable) version
-   git tag -a uv/v1.1.0 -m "Release uv v1.1.0"
+   # Immutable version tag on the merged commit
+   git tag -a uv/v1.1.0 --no-gpg-sign -m "Release uv v1.1.0"
    git push origin uv/v1.1.0
-
-   # Move the floating major tag forward
-   git tag -fa uv/v1 -m "Update uv v1 to v1.1.0"
-   git push origin uv/v1 --force
    ```
 
-4. For a breaking change, create a **new** major tag instead of moving the old one (`uv/v2`).
+4. For a breaking change, cut a new major tag (`uv/v2.0.0`); never move or delete an existing tag.
 
 See [docs/versioning.md](docs/versioning.md) for the complete release procedure.
