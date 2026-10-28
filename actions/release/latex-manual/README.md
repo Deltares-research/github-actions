@@ -84,7 +84,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: Deltares-research/github-actions/actions/release/latex-manual@latex/v1
+      - uses: Deltares-research/github-actions/actions/release/latex-manual@latex/v1.0.2
         with:
           markdown-input-dir: ''     # pure-LaTeX manual; skip conversion
           latex-output-dir: docs/end-user-docs
@@ -118,7 +118,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ steps.rel.outputs.tag }}
-      - uses: Deltares-research/github-actions/actions/release/latex-manual@latex/v1
+      - uses: Deltares-research/github-actions/actions/release/latex-manual@latex/v1.0.2
         with:
           markdown-input-dir: ''
           latex-output-dir: docs/end-user-docs
@@ -131,7 +131,7 @@ jobs:
 ### 3. Markdown → LaTeX → PDF
 
 ```yaml
-- uses: Deltares-research/github-actions/actions/release/latex-manual@latex/v1
+- uses: Deltares-research/github-actions/actions/release/latex-manual@latex/v1.0.2
   with:
     markdown-input-dir: docs/mkdocs/user_docs   # ddocs converts *.md → *.tex
     latex-output-dir: docs/end-user-docs/source
@@ -147,5 +147,5 @@ jobs:
   `backend=bibtex`. `biber` is not installed.
 - **ddocs is pinned** to a commit (the `0.2.0` release) via the single `DDOCS_REPO` constant in `action.yml`;
   bump that to upgrade.
-- Pin the action against the commit SHA behind `latex/v1` for security scanners — see the
+- Pin the action against the commit SHA behind `latex/v1.0.2` for security scanners — see the
   [repo README releases table](../../../README.md#latest-releases).

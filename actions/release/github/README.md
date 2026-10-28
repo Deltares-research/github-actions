@@ -49,7 +49,7 @@ jobs:
           fetch-depth: 0          # full history + tags are required
 
       - name: Release
-        uses: Deltares-research/github-actions/actions/release/github@github-release/v1
+        uses: Deltares-research/github-actions/actions/release/github@github-release/v1.2.1
         with:
           increment: ${{ inputs.increment }}
           prerelease-type: ${{ inputs.prerelease-type }}
@@ -64,7 +64,7 @@ jobs:
 ### Pixi
 
 ```yaml
-- uses: Deltares-research/github-actions/actions/release/github@github-release/v1
+- uses: Deltares-research/github-actions/actions/release/github@github-release/v1.2.1
   with:
     increment: minor
     package-manager: pixi
@@ -77,7 +77,7 @@ jobs:
 ### Monorepo (package with its own `pyproject.toml`)
 
 ```yaml
-- uses: Deltares-research/github-actions/actions/release/github@github-release/v1
+- uses: Deltares-research/github-actions/actions/release/github@github-release/v1.2.1
   with:
     increment: patch
     config-file: packages/my-package/pyproject.toml
