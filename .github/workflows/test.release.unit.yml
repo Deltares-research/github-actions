@@ -63,7 +63,7 @@ jobs:
           - { version: "library-1.0.0",    expected: "false", label: "tag starting with 'library' (contains 'b')" }
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Run script
         id: detect
@@ -93,7 +93,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Calling without arg should exit non-zero
         run: |
@@ -135,7 +135,7 @@ jobs:
               expected: "1.1.0b1", assert_args: "--prerelease beta" }
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Run next-version.sh
         id: run
@@ -203,7 +203,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Calling with too few args should exit non-zero
         run: |
@@ -244,7 +244,7 @@ jobs:
               pm: pixi, build: "0", build_wheel: "true", expect_failure: "true", error_contains: "'build'" }
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Run validate-toolchain.sh
         id: run
@@ -319,7 +319,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Calling with too few args should exit non-zero
         run: |
@@ -366,7 +366,7 @@ jobs:
               expected: "use the # symbol or #tag" }
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Run script
         id: run
@@ -399,7 +399,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Calling without arg should exit non-zero
         run: |
@@ -417,7 +417,7 @@ jobs:
     name: version input is forwarded to every package-manager step
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # release/github composes the inner python-setup/<pm> actions by pinned
       # tag, resolved as a separate checkout at runtime (not from this branch),

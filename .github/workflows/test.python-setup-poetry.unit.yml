@@ -10,7 +10,7 @@ jobs:
     name: defaults (no groups, no extras)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Stage fixture
         run: |
@@ -43,7 +43,7 @@ jobs:
       matrix:
         python-version: ["3.12", "3.13"]
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Stage fixture
         run: |
@@ -65,7 +65,7 @@ jobs:
   multi-groups-space:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Stage fixture
         run: |
@@ -85,7 +85,7 @@ jobs:
   multi-groups-comma:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Stage fixture
         run: |
@@ -105,7 +105,7 @@ jobs:
   single-extra:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Stage fixture
         run: |
@@ -129,7 +129,7 @@ jobs:
   multi-extras-comma:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Stage fixture
         run: |
@@ -149,7 +149,7 @@ jobs:
   multi-extras-space:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Stage fixture
         run: |
@@ -169,7 +169,7 @@ jobs:
   groups-and-extras:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Stage fixture
         run: |
@@ -191,7 +191,7 @@ jobs:
     name: verify-lock with stale lock should fail
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Stage stale fixture
         run: |
@@ -217,7 +217,7 @@ jobs:
     name: verify-lock=false works on healthy lock
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Stage fixture
         run: |
@@ -238,7 +238,7 @@ jobs:
     name: poetry-version pin honored
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Stage fixture
         run: |
@@ -264,7 +264,7 @@ jobs:
     name: empty version falls back to default
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Stage fixture
         run: |
@@ -293,7 +293,7 @@ jobs:
     name: cache-write=true persists cache
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Stage fixture with per-run-unique lock
         # Inject github.run_id into poetry.lock as a comment so hashFiles produces
@@ -328,7 +328,7 @@ jobs:
 
       - name: Look up cache after action ran
         id: verify
-        uses: actions/cache/restore@v6
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.virtualenvs
           key: poetry-${{ runner.os }}-py${{ steps.setup-python.outputs.python-version }}-poetry2.5.1-${{ hashFiles('**/poetry.lock') }}
@@ -356,7 +356,7 @@ jobs:
     name: cache-write=false skips cache save
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Stage fixture with per-run-unique lock
         run: |
@@ -385,7 +385,7 @@ jobs:
 
       - name: Look up cache after action ran
         id: verify
-        uses: actions/cache/restore@v6
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.virtualenvs
           key: poetry-${{ runner.os }}-py${{ steps.setup-python.outputs.python-version }}-poetry2.5.1-${{ hashFiles('**/poetry.lock') }}
@@ -407,7 +407,7 @@ jobs:
     # (contamination-impossible by design, not just by test ordering).
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Stage fixture with per-run-unique lock
         run: |
@@ -459,7 +459,7 @@ jobs:
     name: tolerate whitespace and mixed separators in install-groups
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Stage fixture
         run: |
