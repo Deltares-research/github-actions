@@ -81,18 +81,18 @@ scanners (e.g. StepSecurity Harden-Runner, OpenSSF Scorecard) flag floating tags
 
 | Action                         | Latest version          | Commit SHA (pin this)                      |
 |--------------------------------|-------------------------|--------------------------------------------|
-| `actions/python-setup/pip`     | `pip/v1.1.0`            | `0d76ad54ebc4c8bde82105ac863de1ec841544f1` |
-| `actions/python-setup/uv`      | `uv/v1.1.0`             | `0d76ad54ebc4c8bde82105ac863de1ec841544f1` |
-| `actions/python-setup/poetry`  | `poetry/v1.1.1`         | `5f559b0cb3bf70f719cd00eba8938ac15b433738` |
-| `actions/python-setup/pixi`    | `pixi/v1.1.0`           | `0d76ad54ebc4c8bde82105ac863de1ec841544f1` |
-| `actions/mkdocs-deploy`        | `mkdocs-deploy/v1.1.0`  | `e40b79ba9ee2e6d8d16dde4610f02c3a5af9de5a` |
-| `actions/release/github`       | `github-release/v1.2.0` | `e40b79ba9ee2e6d8d16dde4610f02c3a5af9de5a` |
-| `actions/release/latex-manual` | `latex/v1.0.1`          | `e40b79ba9ee2e6d8d16dde4610f02c3a5af9de5a` |
+| `actions/python-setup/pip`     | `pip/v1.1.1`            | `35542e0d629396ac64162d8a5df6110484009147` |
+| `actions/python-setup/uv`      | `uv/v1.1.1`             | `35542e0d629396ac64162d8a5df6110484009147` |
+| `actions/python-setup/poetry`  | `poetry/v1.1.2`         | `35542e0d629396ac64162d8a5df6110484009147` |
+| `actions/python-setup/pixi`    | `pixi/v1.1.1`           | `35542e0d629396ac64162d8a5df6110484009147` |
+| `actions/mkdocs-deploy`        | `mkdocs-deploy/v1.1.1`  | `2362f622737db2d19ef48f8bc972a1cb268166b5` |
+| `actions/release/github`       | `github-release/v1.2.1` | `2362f622737db2d19ef48f8bc972a1cb268166b5` |
+| `actions/release/latex-manual` | `latex/v1.0.2`          | `2362f622737db2d19ef48f8bc972a1cb268166b5` |
 
 Pin in a consumer workflow by appending the SHA and keeping the version in a trailing comment:
 
 ```yaml
-- uses: Deltares-research/github-actions/actions/release/github@e40b79ba9ee2e6d8d16dde4610f02c3a5af9de5a # github-release/v1.2.0
+- uses: Deltares-research/github-actions/actions/release/github@2362f622737db2d19ef48f8bc972a1cb268166b5 # github-release/v1.2.1
 ```
 
 > Legacy duplicate tags from early tagging also exist (`python-setup/<pm>/*`, `release/github/*`). Prefer the
