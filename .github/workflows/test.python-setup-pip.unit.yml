@@ -263,8 +263,8 @@ jobs:
         run: |
           INSTALLED=$(pip --version | awk '{print $2}')
           echo "Installed pip: $INSTALLED"
-          if [ "$INSTALLED" != "26.1.2" ]; then
-            echo "::error::Expected default pip 26.1.2, got $INSTALLED"
+          if [ "$INSTALLED" != "26.2.2" ]; then
+            echo "::error::Expected default pip 26.2.2, got $INSTALLED"
             exit 1
           fi
 
@@ -329,7 +329,7 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: ~/.cache/pip
-          key: pip-${{ runner.os }}-py3.12-pip26.1.2-${{ hashFiles('**/requirements*.txt', '**/pyproject.toml', '**/setup.py', '**/setup.cfg') }}
+          key: pip-${{ runner.os }}-py3.12-pip26.2.2-${{ hashFiles('**/requirements*.txt', '**/pyproject.toml', '**/setup.py', '**/setup.cfg') }}
           lookup-only: true
 
       - name: Assert cache was saved
@@ -362,7 +362,7 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: ~/.cache/pip
-          key: pip-${{ runner.os }}-py3.12-pip26.1.2-${{ hashFiles('**/requirements*.txt', '**/pyproject.toml', '**/setup.py', '**/setup.cfg') }}
+          key: pip-${{ runner.os }}-py3.12-pip26.2.2-${{ hashFiles('**/requirements*.txt', '**/pyproject.toml', '**/setup.py', '**/setup.cfg') }}
           lookup-only: true
 
       - name: Assert cache was NOT saved

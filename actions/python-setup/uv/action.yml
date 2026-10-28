@@ -7,7 +7,7 @@ inputs:
     required: false
     default: '3.12'
   version:
-    description: 'uv version to install. Empty or omitted falls back to the pinned default (DEFAULT_VERSION in the "Resolve uv version" step). Example: "0.11.28", "0.9.8".'
+    description: 'uv version to install. Empty or omitted falls back to the pinned default (DEFAULT_VERSION in the "Resolve uv version" step). Example: "0.13.6", "0.9.8".'
     required: false
     default: ''
   install-groups:
@@ -38,7 +38,7 @@ runs:
         # Single source of truth for the default uv version. A composite action
         # can't declare a top-level constant, so it lives here on the first step;
         # an empty or omitted `version` input resolves to it.
-        DEFAULT_VERSION: '0.11.28'
+        DEFAULT_VERSION: '0.13.6'
       run: |
         echo "version=${VERSION:-$DEFAULT_VERSION}" >> "$GITHUB_OUTPUT"
 

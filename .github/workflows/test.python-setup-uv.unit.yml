@@ -280,8 +280,8 @@ jobs:
         run: |
           INSTALLED=$(uv --version | awk '{print $2}')
           echo "Installed uv: $INSTALLED"
-          if [ "$INSTALLED" != "0.11.28" ]; then
-            echo "::error::Expected default uv 0.11.28, got $INSTALLED"
+          if [ "$INSTALLED" != "0.13.6" ]; then
+            echo "::error::Expected default uv 0.13.6, got $INSTALLED"
             exit 1
           fi
 
@@ -315,7 +315,7 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: ${{ env.UV_CACHE_DIR }}
-          key: uv-${{ runner.os }}-py3.12-uv0.11.28-${{ hashFiles('**/uv.lock') }}
+          key: uv-${{ runner.os }}-py3.12-uv0.13.6-${{ hashFiles('**/uv.lock') }}
           lookup-only: true
 
       - name: Assert cache was saved
@@ -348,7 +348,7 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: ${{ env.UV_CACHE_DIR }}
-          key: uv-${{ runner.os }}-py3.12-uv0.11.28-${{ hashFiles('**/uv.lock') }}
+          key: uv-${{ runner.os }}-py3.12-uv0.13.6-${{ hashFiles('**/uv.lock') }}
           lookup-only: true
 
       - name: Assert cache was NOT saved
