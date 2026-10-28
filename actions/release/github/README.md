@@ -44,7 +44,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0          # full history + tags are required
 
@@ -100,7 +100,7 @@ Commitizen and the lock-file update run from the directory containing `config-fi
 | `python-version` | Python version to install. | No | `3.12` |
 | `package-manager` | `uv`, `poetry`, or `pixi`. | No | `uv` |
 | `install-groups` | Dependency groups to install (uv/poetry only; space- or comma-separated). | No | `dev docs` |
-| `version` | Version of the selected package manager, forwarded to `python-setup/<pm>`. Empty falls back to that action's pinned default (its `DEFAULT_VERSION`), not `latest`. E.g. uv `0.11.28`, poetry `2.4.1`, pixi `v0.72.2`. | No | `''` |
+| `version` | Version of the selected package manager, forwarded to `python-setup/<pm>`. Empty falls back to that action's pinned default (its `DEFAULT_VERSION`), not `latest`. E.g. uv `0.13.6`, poetry `2.5.1`, pixi `v0.83.0`. | No | `''` |
 | `pixi-environments` | Pixi environments to install (pixi only; passed to `setup-pixi`). | No | `''` |
 | `pixi-activate-environment` | Pixi environment to put on `PATH` (pixi only; must also be in `pixi-environments`). | No | `''` |
 | `verify-lock` | Verify the lock file is up to date before installing. | No | `true` |

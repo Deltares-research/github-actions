@@ -7,7 +7,7 @@ inputs:
     required: false
     default: '3.12'
   version:
-    description: 'pip version to pin inside the venv. Empty or omitted falls back to the pinned default (DEFAULT_VERSION in the "Resolve pip version" step). Example: "26.1.2", "24.3.1".'
+    description: 'pip version to pin inside the venv. Empty or omitted falls back to the pinned default (DEFAULT_VERSION in the "Resolve pip version" step). Example: "26.2.2", "24.3.1".'
     required: false
     default: ''
   requirements-files:
@@ -38,12 +38,12 @@ runs:
         # Single source of truth for the default pip version. A composite action
         # can't declare a top-level constant, so it lives here on the first step;
         # an empty or omitted `version` input resolves to it.
-        DEFAULT_VERSION: '26.1.2'
+        DEFAULT_VERSION: '26.2.2'
       run: |
         echo "version=${VERSION:-$DEFAULT_VERSION}" >> "$GITHUB_OUTPUT"
 
     - name: Set up Python
-      uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+      uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
       with:
         python-version: ${{ inputs.python-version }}
 

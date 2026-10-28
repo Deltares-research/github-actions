@@ -3,7 +3,7 @@ description: 'Setup Python environment with Pixi and install environments, with 
 
 inputs:
   version:
-    description: 'Pixi version to install. Empty or omitted falls back to the pinned default (DEFAULT_VERSION in the "Resolve Pixi version" step). Example: "v0.72.2", "v0.49.0", "latest".'
+    description: 'Pixi version to install. Empty or omitted falls back to the pinned default (DEFAULT_VERSION in the "Resolve Pixi version" step). Example: "v0.83.0", "v0.49.0", "latest".'
     required: false
     default: ''
   environments:
@@ -34,12 +34,12 @@ runs:
         # Single source of truth for the default Pixi version. A composite action
         # can't declare a top-level constant, so it lives here on the first step;
         # an empty or omitted `version` input resolves to it.
-        DEFAULT_VERSION: 'v0.72.2'
+        DEFAULT_VERSION: 'v0.83.0'
       run: |
         echo "version=${VERSION:-$DEFAULT_VERSION}" >> "$GITHUB_OUTPUT"
 
     - name: Setup Pixi
-      uses: prefix-dev/setup-pixi@a09b6247153796b190642a2b53fac4241043cf6f # v0.10.0
+      uses: prefix-dev/setup-pixi@ad1da6449d9e506fd127fd67ab2d054a769f6a94 # v0.11.2
       with:
         pixi-version: ${{ steps.resolve.outputs.version }}
         environments: ${{ inputs.environments }}

@@ -10,7 +10,7 @@ jobs:
     name: defaults (no requirements, no project install)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Stage fixture
         run: |
@@ -37,7 +37,7 @@ jobs:
       matrix:
         python-version: ["3.12", "3.13"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Stage fixture
         run: |
@@ -57,7 +57,7 @@ jobs:
   single-requirements-file:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Stage fixture
         run: |
@@ -75,7 +75,7 @@ jobs:
   multi-requirements-space:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Stage fixture
         run: |
@@ -94,7 +94,7 @@ jobs:
   multi-requirements-comma:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Stage fixture
         run: |
@@ -114,7 +114,7 @@ jobs:
     name: install-project=true installs main deps from pyproject
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Stage fixture
         run: |
@@ -137,7 +137,7 @@ jobs:
   install-project-with-extra-single:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Stage fixture
         run: |
@@ -160,7 +160,7 @@ jobs:
   install-project-with-extras-comma:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Stage fixture
         run: |
@@ -179,7 +179,7 @@ jobs:
   install-project-with-extras-space:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Stage fixture
         run: |
@@ -199,7 +199,7 @@ jobs:
     name: requirements-files + install-project together
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Stage fixture
         run: |
@@ -221,7 +221,7 @@ jobs:
     name: pip-version pin honored
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Stage fixture
         run: |
@@ -245,7 +245,7 @@ jobs:
     name: empty version falls back to default
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Stage fixture
         run: |
@@ -263,8 +263,8 @@ jobs:
         run: |
           INSTALLED=$(pip --version | awk '{print $2}')
           echo "Installed pip: $INSTALLED"
-          if [ "$INSTALLED" != "26.1.2" ]; then
-            echo "::error::Expected default pip 26.1.2, got $INSTALLED"
+          if [ "$INSTALLED" != "26.2.2" ]; then
+            echo "::error::Expected default pip 26.2.2, got $INSTALLED"
             exit 1
           fi
 
@@ -272,7 +272,7 @@ jobs:
     name: bare python and pip resolve to .venv after action
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Stage fixture
         run: |
@@ -306,7 +306,7 @@ jobs:
     name: cache-write=true persists cache
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Stage fixture with per-run-unique requirements
         # Inject a comment with github.run_id so hashFiles produces a unique
@@ -329,7 +329,7 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: ~/.cache/pip
-          key: pip-${{ runner.os }}-py3.12-pip26.1.2-${{ hashFiles('**/requirements*.txt', '**/pyproject.toml', '**/setup.py', '**/setup.cfg') }}
+          key: pip-${{ runner.os }}-py3.12-pip26.2.2-${{ hashFiles('**/requirements*.txt', '**/pyproject.toml', '**/setup.py', '**/setup.cfg') }}
           lookup-only: true
 
       - name: Assert cache was saved
@@ -344,7 +344,7 @@ jobs:
     name: cache-write=false skips cache save
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Stage fixture with per-run-unique requirements
         run: |
@@ -362,7 +362,7 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: ~/.cache/pip
-          key: pip-${{ runner.os }}-py3.12-pip26.1.2-${{ hashFiles('**/requirements*.txt', '**/pyproject.toml', '**/setup.py', '**/setup.cfg') }}
+          key: pip-${{ runner.os }}-py3.12-pip26.2.2-${{ hashFiles('**/requirements*.txt', '**/pyproject.toml', '**/setup.py', '**/setup.cfg') }}
           lookup-only: true
 
       - name: Assert cache was NOT saved
@@ -377,7 +377,7 @@ jobs:
     name: tolerate whitespace and mixed separators in install-extras
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Stage fixture
         run: |
