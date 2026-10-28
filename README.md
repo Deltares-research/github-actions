@@ -54,7 +54,7 @@ steps:
   - uses: actions/checkout@v7
 
   - name: Setup Python with uv
-    uses: Deltares-research/github-actions/actions/python-setup/uv@uv/v1.1.0
+    uses: Deltares-research/github-actions/actions/python-setup/uv@uv/v1.1.1
     with:
       python-version: '3.12'
       install-groups: dev
