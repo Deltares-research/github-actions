@@ -10,7 +10,7 @@ jobs:
     name: defaults (no environments specified)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Stage fixture
         run: |
@@ -29,7 +29,7 @@ jobs:
   single-environment:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Stage fixture
         run: |
@@ -49,7 +49,7 @@ jobs:
   multi-environments-space:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Stage fixture
         run: |
@@ -71,7 +71,7 @@ jobs:
     name: activate-environment puts env on PATH
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Stage fixture
         run: |
@@ -94,7 +94,7 @@ jobs:
     name: verify-lock with stale lock should fail
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Stage stale fixture
         run: |
@@ -120,7 +120,7 @@ jobs:
     name: verify-lock=false works on healthy lock
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Stage fixture
         run: |
@@ -140,7 +140,7 @@ jobs:
     name: pixi-version pin honored
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Stage fixture
         run: |
@@ -166,7 +166,7 @@ jobs:
     name: empty version falls back to default
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Stage fixture
         run: |

@@ -44,7 +44,7 @@ permissions:
   contents: write   # only needed if attaching PDFs to a release
 
 steps:
-  - uses: actions/checkout@v4
+  - uses: actions/checkout@v7
 ```
 
 You must provide **`latex-template-token`** — a secret with read access to `Deltares/LatexInstallation`
@@ -83,7 +83,7 @@ jobs:
   build-manuals:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: Deltares-research/github-actions/actions/release/latex-manual@latex/v1
         with:
           markdown-input-dir: ''     # pure-LaTeX manual; skip conversion
@@ -115,7 +115,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: echo "tag=$(gh api repos/${{ github.repository }}/releases --jq '.[0].tag_name')" >> "$GITHUB_OUTPUT"
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ steps.rel.outputs.tag }}
       - uses: Deltares-research/github-actions/actions/release/latex-manual@latex/v1

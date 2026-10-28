@@ -44,7 +44,7 @@ permissions:
   pages: write      # only required if you also use the GitHub Pages deploy API
 
 steps:
-  - uses: actions/checkout@v4
+  - uses: actions/checkout@v7
     with:
       fetch-depth: 0   # mike requires full history to maintain gh-pages
 ```
@@ -79,7 +79,7 @@ jobs:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: { fetch-depth: 0 }
       - uses: Deltares-research/github-actions/actions/mkdocs-deploy@mkdocs-deploy/v1
         with:
@@ -90,7 +90,7 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: { fetch-depth: 0 }
       - uses: Deltares-research/github-actions/actions/mkdocs-deploy@mkdocs-deploy/v1
         with:
@@ -101,7 +101,7 @@ jobs:
     if: github.event_name == 'release'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: { fetch-depth: 0 }
       - uses: Deltares-research/github-actions/actions/mkdocs-deploy@mkdocs-deploy/v1
         with:
@@ -158,7 +158,7 @@ jobs:
   deploy-release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: { fetch-depth: 0 }
       - uses: Deltares-research/github-actions/actions/mkdocs-deploy@mkdocs-deploy/v1
         with:

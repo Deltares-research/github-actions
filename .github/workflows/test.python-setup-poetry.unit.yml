@@ -10,7 +10,7 @@ jobs:
     name: defaults (no groups, no extras)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Stage fixture
         run: |
@@ -43,7 +43,7 @@ jobs:
       matrix:
         python-version: ["3.12", "3.13"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Stage fixture
         run: |
@@ -65,7 +65,7 @@ jobs:
   multi-groups-space:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Stage fixture
         run: |
@@ -85,7 +85,7 @@ jobs:
   multi-groups-comma:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Stage fixture
         run: |
@@ -105,7 +105,7 @@ jobs:
   single-extra:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Stage fixture
         run: |
@@ -129,7 +129,7 @@ jobs:
   multi-extras-comma:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Stage fixture
         run: |
@@ -149,7 +149,7 @@ jobs:
   multi-extras-space:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Stage fixture
         run: |
@@ -169,7 +169,7 @@ jobs:
   groups-and-extras:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Stage fixture
         run: |
@@ -191,7 +191,7 @@ jobs:
     name: verify-lock with stale lock should fail
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Stage stale fixture
         run: |
@@ -217,7 +217,7 @@ jobs:
     name: verify-lock=false works on healthy lock
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Stage fixture
         run: |
@@ -238,7 +238,7 @@ jobs:
     name: poetry-version pin honored
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Stage fixture
         run: |
@@ -264,7 +264,7 @@ jobs:
     name: empty version falls back to default
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Stage fixture
         run: |
@@ -293,7 +293,7 @@ jobs:
     name: cache-write=true persists cache
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Stage fixture with per-run-unique lock
         # Inject github.run_id into poetry.lock as a comment so hashFiles produces
@@ -309,7 +309,7 @@ jobs:
       # patch version, not the coarse python-version input).
       - name: Resolve Python patch version
         id: setup-python
-        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12'
 
@@ -356,7 +356,7 @@ jobs:
     name: cache-write=false skips cache save
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Stage fixture with per-run-unique lock
         run: |
@@ -371,7 +371,7 @@ jobs:
       # re-validated here (the cache-write=true job does that).
       - name: Resolve Python patch version
         id: setup-python
-        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12'
 
@@ -407,7 +407,7 @@ jobs:
     # (contamination-impossible by design, not just by test ordering).
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Stage fixture with per-run-unique lock
         run: |
@@ -459,7 +459,7 @@ jobs:
     name: tolerate whitespace and mixed separators in install-groups
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Stage fixture
         run: |

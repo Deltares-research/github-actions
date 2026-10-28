@@ -51,7 +51,7 @@ Each action is versioned independently using **namespaced tags** (`<namespace>/v
 
 ```yaml
 steps:
-  - uses: actions/checkout@v4
+  - uses: actions/checkout@v7
 
   - name: Setup Python with uv
     uses: Deltares-research/github-actions/actions/python-setup/uv@uv/v1.1.0
