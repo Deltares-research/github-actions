@@ -66,7 +66,7 @@ inputs:
     required: false
     default: 'build'
   smoke-test:
-    description: 'Bash command run after the build to prove the executable starts. The built exe path is available as "$EXECUTABLE". Empty skips it. Example: ''"$EXECUTABLE" --version''.'
+    description: 'Bash command run after the build to prove the executable starts. The built exe path is available as "$EXECUTABLE". It is executed as shell code (eval), so never put untrusted values such as github.head_ref or PR titles in it. Empty skips it. Example: ''"$EXECUTABLE" --version''.'
     required: false
     default: ''
   zip:

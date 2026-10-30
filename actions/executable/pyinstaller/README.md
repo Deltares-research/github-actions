@@ -38,6 +38,8 @@ For anything non-trivial, commit a `.spec` file and pass `spec-file: app.spec` i
 - The layout is detected from the build output: onedir gives `<output-dir>/<name>/` and sets `bundle-dir`, onefile
   gives `<output-dir>/<name>.exe` and leaves `bundle-dir` empty. A spec file works the same way.
 - The zip is written next to `output-dir` and holds the bundle contents at its root.
+- `smoke-test` is run as shell code (`eval`). Do not interpolate untrusted values (branch names, PR titles) into it.
+- `output-dir` is deleted before each build, so it must be a relative subdirectory that holds nothing else you need.
 - `--collect-data` / `--collect-all` inspect the *installed* package, so it must be installed in the environment.
 
 ## Outputs
