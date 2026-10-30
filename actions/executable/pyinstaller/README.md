@@ -44,7 +44,8 @@ For anything non-trivial, commit a `.spec` file and pass `spec-file: app.spec` i
 
 ## Outputs
 
-`executable-path`, `bundle-dir`, `zip-path`, `artifact-name`.
+`executable-path`, `bundle-dir`, `zip-path` (all absolute paths with forward slashes, so they stay valid after a
+`cd` and in any shell), `artifact-name`, and `validation-error` (why the action refused its inputs, empty otherwise).
 
 See [`action.yml`](action.yml) for every input, and `.github/workflows/test.executable-pyinstaller.unit.yml` for tested
 examples.

@@ -44,8 +44,12 @@ jobs:
           ZIP_PATH: ${{ steps.build.outputs.zip-path }}
           ARTIFACT_NAME: ${{ steps.build.outputs.artifact-name }}
         run: |
-          [[ "$EXECUTABLE" == "build/hello/hello.exe" ]] || { echo "::error::executable-path was '$EXECUTABLE'"; exit 1; }
-          [[ "$BUNDLE_DIR" == "build/hello" ]] || { echo "::error::bundle-dir was '$BUNDLE_DIR'"; exit 1; }
+          abs='^[A-Za-z]:/[^\]*$'   # absolute, forward slashes only
+          for path in "$EXECUTABLE" "$BUNDLE_DIR" "$ZIP_PATH"; do
+            [[ "$path" =~ $abs ]] || { echo "::error::not an absolute forward-slash path: '$path'"; exit 1; }
+          done
+          [[ "$EXECUTABLE" == */build/hello/hello.exe ]] || { echo "::error::executable-path was '$EXECUTABLE'"; exit 1; }
+          [[ "$BUNDLE_DIR" == */build/hello ]] || { echo "::error::bundle-dir was '$BUNDLE_DIR'"; exit 1; }
           [[ "$ARTIFACT_NAME" == "hello-exe-uv-onedir" ]] || { echo "::error::artifact-name was '$ARTIFACT_NAME'"; exit 1; }
           [[ -f "$ZIP_PATH" ]] || { echo "::error::zip-path '$ZIP_PATH' does not exist"; exit 1; }
           out=$("$EXECUTABLE")
@@ -121,7 +125,7 @@ jobs:
           ZIP_PATH: ${{ steps.build.outputs.zip-path }}
           ARTIFACT_NAME: ${{ steps.build.outputs.artifact-name }}
         run: |
-          [[ "$EXECUTABLE" == "dist/hello.exe" ]] || { echo "::error::executable-path was '$EXECUTABLE'"; exit 1; }
+          [[ "$EXECUTABLE" =~ ^[A-Za-z]:/ && "$EXECUTABLE" == */dist/hello.exe ]] || { echo "::error::executable-path was '$EXECUTABLE'"; exit 1; }
           [[ -z "$BUNDLE_DIR" ]] || { echo "::error::bundle-dir should be empty for onefile, was '$BUNDLE_DIR'"; exit 1; }
           [[ -z "$ZIP_PATH" ]] || { echo "::error::zip-path should be empty when zip=false, was '$ZIP_PATH'"; exit 1; }
           [[ -z "$ARTIFACT_NAME" ]] || { echo "::error::artifact-name should be empty when upload-artifact=false, was '$ARTIFACT_NAME'"; exit 1; }

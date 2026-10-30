@@ -92,13 +92,13 @@ inputs:
 
 outputs:
   executable-path:
-    description: 'Path to the built .exe.'
+    description: 'Absolute path to the built .exe, with forward slashes (for example D:/a/repo/repo/build/app/app.exe).'
     value: ${{ steps.locate.outputs.executable-path }}
   bundle-dir:
-    description: 'Path to the onedir bundle folder. Empty for onefile builds.'
+    description: 'Absolute path to the onedir bundle folder, with forward slashes. Empty for onefile builds.'
     value: ${{ steps.locate.outputs.bundle-dir }}
   zip-path:
-    description: 'Path to the zip. Empty when zip is "false".'
+    description: 'Absolute path to the zip, with forward slashes. Empty when zip is "false".'
     value: ${{ steps.zip.outputs.zip-path }}
   artifact-name:
     description: 'Name of the uploaded workflow artifact. Empty when upload-artifact is "false".'
@@ -277,12 +277,14 @@ runs:
       run: |
         # Detect the layout from what PyInstaller produced, so a spec file
         # (which decides onedir/onefile itself) works the same as the flags.
+        # Outputs are absolute with forward slashes (cygpath -m) so they stay
+        # valid when a later step changes directory or uses a different shell.
         if [[ -f "$OUTPUT_DIR/$NAME/$NAME.exe" ]]; then
-          echo "bundle-dir=$OUTPUT_DIR/$NAME" >> "$GITHUB_OUTPUT"
-          echo "executable-path=$OUTPUT_DIR/$NAME/$NAME.exe" >> "$GITHUB_OUTPUT"
+          echo "bundle-dir=$(cygpath -ma "$OUTPUT_DIR/$NAME")" >> "$GITHUB_OUTPUT"
+          echo "executable-path=$(cygpath -ma "$OUTPUT_DIR/$NAME/$NAME.exe")" >> "$GITHUB_OUTPUT"
         elif [[ -f "$OUTPUT_DIR/$NAME.exe" ]]; then
           echo "bundle-dir=" >> "$GITHUB_OUTPUT"
-          echo "executable-path=$OUTPUT_DIR/$NAME.exe" >> "$GITHUB_OUTPUT"
+          echo "executable-path=$(cygpath -ma "$OUTPUT_DIR/$NAME.exe")" >> "$GITHUB_OUTPUT"
         else
           echo "::error::PyInstaller finished but neither $OUTPUT_DIR/$NAME/$NAME.exe nor $OUTPUT_DIR/$NAME.exe exists (does 'name' match the spec?)"
           ls -R "$OUTPUT_DIR" || true
@@ -316,7 +318,7 @@ runs:
         if (Test-Path $zipPath) { Remove-Item $zipPath }
         if ($env:BUNDLE_DIR) { $source = Join-Path $env:BUNDLE_DIR '*' } else { $source = $env:EXECUTABLE }
         Compress-Archive -Path $source -DestinationPath $zipPath
-        "zip-path=$zipPath" >> $env:GITHUB_OUTPUT
+        "zip-path=$($zipPath -replace '\\', '/')" >> $env:GITHUB_OUTPUT
 
     - name: Upload executable as artifact
       if: inputs.upload-artifact == 'true'
