@@ -1,0 +1,16 @@
+[tool.poetry]
+name = "test-pyinstaller-poetry"
+version = "0.1.0"
+description = "Fixture for executable/pyinstaller: poetry with pyinstaller in the dev group"
+authors = ["Test <test@example.com>"]
+package-mode = false
+
+[tool.poetry.dependencies]
+python = ">=3.12,<3.15"
+
+[tool.poetry.group.dev.dependencies]
+pyinstaller = ">=6.22.3"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

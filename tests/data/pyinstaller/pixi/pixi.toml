@@ -1,0 +1,12 @@
+[project]
+name = "test-pyinstaller-pixi"
+version = "0.1.0"
+description = "Fixture for executable/pyinstaller: pixi with pyinstaller via pypi-dependencies"
+channels = ["conda-forge"]
+platforms = ["win-64"]
+
+[dependencies]
+python = "3.12.*"
+
+[pypi-dependencies]
+pyinstaller = ">=6.22.3"

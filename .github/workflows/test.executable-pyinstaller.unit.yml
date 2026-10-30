@@ -1,0 +1,245 @@
+name: executable/pyinstaller - unit
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+# Every job stages the shared fixture app (tests/data/pyinstaller/app) plus the
+# per-package-manager manifest + lock file, then builds `hello_app`. The exe
+# prints a packaged data file and a dynamically imported plugin, so a build that
+# drops --add-data or --hidden-import produces an exe that crashes — the smoke
+# test catches a bundle that builds but does not run.
+
+jobs:
+  uv-onedir:
+    name: uv onedir (flags, zip, artifact)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Stage fixture
+        shell: bash
+        run: |
+          cp tests/data/pyinstaller/uv/pyproject.toml ./pyproject.toml
+          cp tests/data/pyinstaller/uv/uv.lock ./uv.lock
+          cp -r tests/data/pyinstaller/app/src ./src
+
+      - name: Run action
+        id: build
+        uses: ./actions/executable/pyinstaller
+        with:
+          package-manager: uv
+          name: hello
+          entry-point: src/hello_app/cli.py
+          extra-args: --paths src --hidden-import hello_app.plugin --exclude-module pytest --add-data src/hello_app/data;hello_app/data
+          smoke-test: '"$EXECUTABLE"'
+          artifact-name: hello-exe-uv-onedir
+
+      - name: Verify outputs and bundle
+        shell: bash
+        env:
+          EXECUTABLE: ${{ steps.build.outputs.executable-path }}
+          BUNDLE_DIR: ${{ steps.build.outputs.bundle-dir }}
+          ZIP_PATH: ${{ steps.build.outputs.zip-path }}
+          ARTIFACT_NAME: ${{ steps.build.outputs.artifact-name }}
+        run: |
+          [[ "$EXECUTABLE" == "build/hello/hello.exe" ]] || { echo "::error::executable-path was '$EXECUTABLE'"; exit 1; }
+          [[ "$BUNDLE_DIR" == "build/hello" ]] || { echo "::error::bundle-dir was '$BUNDLE_DIR'"; exit 1; }
+          [[ "$ARTIFACT_NAME" == "hello-exe-uv-onedir" ]] || { echo "::error::artifact-name was '$ARTIFACT_NAME'"; exit 1; }
+          [[ -f "$ZIP_PATH" ]] || { echo "::error::zip-path '$ZIP_PATH' does not exist"; exit 1; }
+          out=$("$EXECUTABLE")
+          echo "$out"
+          grep -q "plugin: dynamic-plugin" <<< "$out"
+          grep -q "hello from the bundled data file" <<< "$out"
+          # The generated spec must not be left in the working directory.
+          if [[ -e hello.spec ]]; then
+            echo "::error::generated hello.spec was left in the workspace"
+            exit 1
+          fi
+
+      - name: Verify zip contents
+        shell: pwsh
+        env:
+          ZIP_PATH: ${{ steps.build.outputs.zip-path }}
+        run: |
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $zip = [System.IO.Compression.ZipFile]::OpenRead($env:ZIP_PATH)
+          $names = $zip.Entries.FullName
+          $zip.Dispose()
+          $names | Select-Object -First 10
+          # Bundle contents sit at the zip root, with no leading build/hello/.
+          if ($names -notcontains 'hello.exe') { throw "hello.exe not at zip root" }
+
+      - name: Download the uploaded artifact
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ steps.build.outputs.artifact-name }}
+          path: downloaded
+
+      - name: Verify artifact is the zip
+        shell: bash
+        run: |
+          ls downloaded
+          [[ -f downloaded/hello-windows.zip ]] || { echo "::error::expected downloaded/hello-windows.zip"; exit 1; }
+
+  uv-onefile:
+    name: uv onefile (no zip, no upload)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Stage fixture
+        shell: bash
+        run: |
+          cp tests/data/pyinstaller/uv/pyproject.toml ./pyproject.toml
+          cp tests/data/pyinstaller/uv/uv.lock ./uv.lock
+          cp -r tests/data/pyinstaller/app/src ./src
+
+      - name: Run action
+        id: build
+        uses: ./actions/executable/pyinstaller
+        with:
+          package-manager: uv
+          name: hello
+          entry-point: src/hello_app/cli.py
+          extra-args: --onefile --paths src --hidden-import hello_app.plugin --add-data src/hello_app/data;hello_app/data
+          output-dir: dist
+          zip: 'false'
+          upload-artifact: 'false'
+
+      - name: Verify single-file output
+        shell: bash
+        env:
+          EXECUTABLE: ${{ steps.build.outputs.executable-path }}
+          BUNDLE_DIR: ${{ steps.build.outputs.bundle-dir }}
+          ZIP_PATH: ${{ steps.build.outputs.zip-path }}
+          ARTIFACT_NAME: ${{ steps.build.outputs.artifact-name }}
+        run: |
+          [[ "$EXECUTABLE" == "dist/hello.exe" ]] || { echo "::error::executable-path was '$EXECUTABLE'"; exit 1; }
+          [[ -z "$BUNDLE_DIR" ]] || { echo "::error::bundle-dir should be empty for onefile, was '$BUNDLE_DIR'"; exit 1; }
+          [[ -z "$ZIP_PATH" ]] || { echo "::error::zip-path should be empty when zip=false, was '$ZIP_PATH'"; exit 1; }
+          [[ -z "$ARTIFACT_NAME" ]] || { echo "::error::artifact-name should be empty when upload-artifact=false, was '$ARTIFACT_NAME'"; exit 1; }
+          "$EXECUTABLE" | grep -q "plugin: dynamic-plugin"
+
+  uv-spec-file:
+    name: uv with a committed spec file
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Stage fixture
+        shell: bash
+        run: |
+          cp tests/data/pyinstaller/uv/pyproject.toml ./pyproject.toml
+          cp tests/data/pyinstaller/uv/uv.lock ./uv.lock
+          cp tests/data/pyinstaller/spec/hello.spec ./hello.spec
+          cp -r tests/data/pyinstaller/app/src ./src
+
+      # entry-point and extra-args are deliberately omitted: the spec carries the data files and the hidden import.
+      - name: Run action
+        id: build
+        uses: ./actions/executable/pyinstaller
+        with:
+          package-manager: uv
+          name: hello
+          spec-file: hello.spec
+          upload-artifact: 'false'
+          smoke-test: '"$EXECUTABLE" | grep -q "plugin: dynamic-plugin"'
+
+      - name: Verify the committed spec was left alone
+        shell: bash
+        run: |
+          [[ -f hello.spec ]] || { echo "::error::committed spec was removed"; exit 1; }
+
+  poetry-onedir:
+    name: poetry onedir
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Stage fixture
+        shell: bash
+        run: |
+          cp tests/data/pyinstaller/poetry/pyproject.toml ./pyproject.toml
+          cp tests/data/pyinstaller/poetry/poetry.lock ./poetry.lock
+          cp -r tests/data/pyinstaller/app/src ./src
+
+      - name: Run action
+        uses: ./actions/executable/pyinstaller
+        with:
+          package-manager: poetry
+          install-groups: dev
+          name: hello
+          entry-point: src/hello_app/cli.py
+          extra-args: --paths src --hidden-import hello_app.plugin --add-data src/hello_app/data;hello_app/data
+          upload-artifact: 'false'
+          smoke-test: '"$EXECUTABLE" | grep -q "plugin: dynamic-plugin"'
+
+  pixi-onedir:
+    name: pixi onedir
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Stage fixture
+        shell: bash
+        run: |
+          cp tests/data/pyinstaller/pixi/pixi.toml ./pixi.toml
+          cp tests/data/pyinstaller/pixi/pixi.lock ./pixi.lock
+          cp -r tests/data/pyinstaller/app/src ./src
+
+      - name: Run action
+        uses: ./actions/executable/pyinstaller
+        with:
+          package-manager: pixi
+          name: hello
+          entry-point: src/hello_app/cli.py
+          extra-args: --paths src --hidden-import hello_app.plugin --add-data src/hello_app/data;hello_app/data
+          upload-artifact: 'false'
+          smoke-test: '"$EXECUTABLE" | grep -q "plugin: dynamic-plugin"'
+
+  fails-on-non-windows:
+    name: fails fast on a non-Windows runner
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Run action (expected to fail at validation)
+        id: run
+        continue-on-error: true
+        uses: ./actions/executable/pyinstaller
+        with:
+          name: hello
+          entry-point: src/hello_app/cli.py
+
+      - name: Assert action failed
+        shell: bash
+        run: |
+          if [ "${{ steps.run.outcome }}" != "failure" ]; then
+            echo "::error::Expected action to fail on ubuntu, but outcome was ${{ steps.run.outcome }}"
+            exit 1
+          fi
+          echo "Action correctly refused a non-Windows runner"
+
+  fails-without-entry-point:
+    name: fails when neither entry-point nor spec-file is set
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Run action (expected to fail at validation)
+        id: run
+        continue-on-error: true
+        uses: ./actions/executable/pyinstaller
+        with:
+          name: hello
+
+      - name: Assert action failed
+        shell: bash
+        run: |
+          if [ "${{ steps.run.outcome }}" != "failure" ]; then
+            echo "::error::Expected action to fail without entry-point/spec-file, but outcome was ${{ steps.run.outcome }}"
+            exit 1
+          fi
+          echo "Action correctly required entry-point or spec-file"
