@@ -62,7 +62,7 @@ inputs:
     required: false
     default: ''
   output-dir:
-    description: 'Directory the bundle is written to. PyInstaller scratch files go to the runner temp directory, so nothing else lands here. Example: "build", "dist".'
+    description: 'Directory the bundle is written to. It is DELETED before each build, so it must be a relative subdirectory of the workspace that holds nothing else you need (no "", ".", "..", absolute paths). PyInstaller scratch files go to the runner temp directory. Example: "build", "dist/exe".'
     required: false
     default: 'build'
   smoke-test:
@@ -119,6 +119,7 @@ runs:
         NAME: ${{ inputs.name }}
         ENTRY_POINT: ${{ inputs.entry-point }}
         SPEC_FILE: ${{ inputs.spec-file }}
+        OUTPUT_DIR: ${{ inputs.output-dir }}
       run: |
         fail() {
           echo "validation-error=$1" >> "$GITHUB_OUTPUT"
@@ -138,6 +139,24 @@ runs:
         fi
         if [[ -z "$ENTRY_POINT" && -z "$SPEC_FILE" ]]; then
           fail "Set either entry-point or spec-file"
+        fi
+
+        # output-dir is deleted before every build, so it must be a plain
+        # relative path strictly inside the workspace: not empty, not the
+        # workspace itself, not absolute, no ".." segments.
+        if [[ "$OUTPUT_DIR" == /* || "$OUTPUT_DIR" == *\\* || "$OUTPUT_DIR" =~ ^[A-Za-z]: ]]; then
+          fail "output-dir must be a relative path inside the workspace with forward slashes (got '$OUTPUT_DIR')"
+        fi
+        has_real_segment=false
+        IFS='/' read -r -a segments <<< "$OUTPUT_DIR"
+        for segment in "${segments[@]}"; do
+          if [[ "$segment" == ".." ]]; then
+            fail "output-dir must not contain '..' (got '$OUTPUT_DIR')"
+          fi
+          if [[ -n "$segment" && "$segment" != "." ]]; then has_real_segment=true; fi
+        done
+        if [[ "$has_real_segment" != true ]]; then
+          fail "output-dir must name a subdirectory; it is deleted before each build (got '$OUTPUT_DIR')"
         fi
 
     # Python environment setup — delegated to actions/python-setup/<pm>

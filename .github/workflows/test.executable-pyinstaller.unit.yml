@@ -252,3 +252,60 @@ jobs:
           [[ "$OUTCOME" == "failure" ]] || { echo "::error::Expected failure without entry-point/spec-file, outcome was $OUTCOME"; exit 1; }
           [[ "$REASON" == "Set either entry-point or spec-file" ]] || { echo "::error::Unexpected reason: '$REASON'"; exit 1; }
           echo "Action correctly required entry-point or spec-file"
+
+  fails-on-unsafe-output-dir:
+    name: refuses an output-dir that would be wiped unsafely
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # A sentinel proves nothing in the workspace was deleted.
+      - name: Create sentinel
+        shell: bash
+        run: echo keep > sentinel.txt
+
+      - name: Workspace root
+        id: root
+        continue-on-error: true
+        uses: ./actions/executable/pyinstaller
+        with:
+          name: hello
+          entry-point: src/hello_app/cli.py
+          output-dir: .
+
+      - name: Parent directory
+        id: parent
+        continue-on-error: true
+        uses: ./actions/executable/pyinstaller
+        with:
+          name: hello
+          entry-point: src/hello_app/cli.py
+          output-dir: dist/../../outside
+
+      - name: Absolute path
+        id: absolute
+        continue-on-error: true
+        uses: ./actions/executable/pyinstaller
+        with:
+          name: hello
+          entry-point: src/hello_app/cli.py
+          output-dir: C:/Windows/Temp/out
+
+      - name: Assert each was refused for output-dir and nothing was deleted
+        shell: bash
+        env:
+          ROOT: ${{ steps.root.outputs.validation-error }}
+          PARENT: ${{ steps.parent.outputs.validation-error }}
+          ABSOLUTE: ${{ steps.absolute.outputs.validation-error }}
+          ROOT_OUTCOME: ${{ steps.root.outcome }}
+          PARENT_OUTCOME: ${{ steps.parent.outcome }}
+          ABSOLUTE_OUTCOME: ${{ steps.absolute.outcome }}
+        run: |
+          for outcome in "$ROOT_OUTCOME" "$PARENT_OUTCOME" "$ABSOLUTE_OUTCOME"; do
+            [[ "$outcome" == "failure" ]] || { echo "::error::Expected failure, outcome was $outcome"; exit 1; }
+          done
+          [[ "$ROOT" == *"must name a subdirectory"* ]] || { echo "::error::root: '$ROOT'"; exit 1; }
+          [[ "$PARENT" == *"must not contain '..'"* ]] || { echo "::error::parent: '$PARENT'"; exit 1; }
+          [[ "$ABSOLUTE" == *"must be a relative path"* ]] || { echo "::error::absolute: '$ABSOLUTE'"; exit 1; }
+          [[ -f sentinel.txt && -d tests ]] || { echo "::error::workspace content was deleted"; exit 1; }
+          echo "All unsafe output-dir values were refused"
