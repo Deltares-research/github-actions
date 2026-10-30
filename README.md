@@ -23,6 +23,14 @@ Stand-alone composite action for deploying MkDocs documentation with `mike` vers
 
 [📖 Full Documentation](actions/mkdocs-deploy/README.md)
 
+### 🏗️ Executable Build (`actions/executable/pyinstaller/`)
+Stand-alone composite action that builds a Windows executable with PyInstaller (onedir/onefile or a `.spec` file),
+optionally zips it and uploads it as an artifact. Supports uv, poetry, pixi. Windows runners only.
+
+- **`actions/executable/pyinstaller`** — Setup Python (via `actions/python-setup/<pm>`) and build the executable
+
+[📖 Full Documentation](actions/executable/pyinstaller/README.md)
+
 ### 📄 LaTeX Documentation (`actions/release/latex-manual/`)
 Self-contained pipeline for building Deltares LaTeX/PDF manuals via the [`ddocs`](https://github.com/Deltares-research/doc_utils)
 CLI. Installs its own Python + ddocs (pandoc bundled), fetches the Deltares LaTeX styles from the internal
@@ -62,15 +70,16 @@ steps:
 
 ### Namespace registry
 
-| Action                         | Namespace        |
-|--------------------------------|------------------|
-| `actions/python-setup/pip`     | `pip`            |
-| `actions/python-setup/uv`      | `uv`             |
-| `actions/python-setup/poetry`  | `poetry`         |
-| `actions/python-setup/pixi`    | `pixi`           |
-| `actions/mkdocs-deploy`        | `mkdocs-deploy`  |
-| `actions/release/github`       | `github-release` |
-| `actions/release/latex-manual` | `latex`          |
+| Action                           | Namespace        |
+|----------------------------------|------------------|
+| `actions/python-setup/pip`       | `pip`            |
+| `actions/python-setup/uv`        | `uv`             |
+| `actions/python-setup/poetry`    | `poetry`         |
+| `actions/python-setup/pixi`      | `pixi`           |
+| `actions/mkdocs-deploy`          | `mkdocs-deploy`  |
+| `actions/executable/pyinstaller` | `pyinstaller`    |
+| `actions/release/github`         | `github-release` |
+| `actions/release/latex-manual`   | `latex`          |
 
 ### Latest releases
 

@@ -1,0 +1,330 @@
+name: 'Build Executable (PyInstaller)'
+description: |
+  Stand-alone composite action that sets up a Python environment and builds a
+  Windows executable with PyInstaller, optionally zipping the bundle and
+  uploading it as a workflow artifact.
+
+  Python setup is delegated to `actions/python-setup/<package-manager>`.
+  PyInstaller itself must be a dependency of the consumer project (a `dev`
+  group for uv/poetry, the manifest for pixi); it is run through the package
+  manager (`uv run` / `poetry run` / `pixi run`) so the build uses the locked
+  version.
+
+  PyInstaller does not cross-compile: run this on a `windows-latest` runner.
+  The action fails fast on any other OS.
+
+  Attaching the result to a GitHub release is deliberately out of scope — it
+  needs `contents: write` and usually a different job. Use the `zip-path`
+  output (or the uploaded artifact) from a follow-up job.
+
+inputs:
+  python-version:
+    description: 'Python version to install (uv/poetry only; pixi pins Python in its manifest). Example: "3.12", "3.13".'
+    required: false
+    default: '3.12'
+  package-manager:
+    description: 'Package manager to set up Python with. Example: "uv", "poetry", "pixi".'
+    required: false
+    default: 'uv'
+  version:
+    description: 'Version of the selected package manager to install (forwarded to the matching python-setup/<pm> action). Empty or omitted falls back to that action''s pinned default. Example: uv "0.13.6", poetry "2.5.1", pixi "v0.83.0".'
+    required: false
+    default: ''
+  install-groups:
+    description: 'Dependency groups to install (uv --group / poetry --with; ignored for pixi). Must include the group that contains pyinstaller. Space- or comma-separated. Example: "dev", "dev build", "dev,build".'
+    required: false
+    default: 'dev'
+  pixi-environments:
+    description: 'Pixi environments to install (pixi only). Space-separated. Empty means the default environment. Example: "build", "py312 build".'
+    required: false
+    default: ''
+  pixi-activate-environment:
+    description: 'Pixi environment to run PyInstaller in (pixi only). Must also be listed in pixi-environments. Example: "build".'
+    required: false
+    default: ''
+  verify-lock:
+    description: 'Whether the python-setup action verifies the lock file matches the manifest before installing. Example: "true", "false".'
+    required: false
+    default: 'true'
+  name:
+    description: 'Executable and bundle name (PyInstaller --name). With spec-file it must match the name used in the spec''s COLLECT/EXE so the action can locate the output. Example: "singlerunner".'
+    required: true
+  entry-point:
+    description: 'Python script PyInstaller bundles. Required unless spec-file is set. Example: "src/singlerunner/cli.py".'
+    required: false
+    default: ''
+  spec-file:
+    description: 'Path to a committed .spec file. When set, entry-point and extra-args are ignored, because PyInstaller rejects them alongside a spec. Example: "build/app.spec".'
+    required: false
+    default: ''
+  extra-args:
+    description: 'PyInstaller arguments, appended verbatim and split on whitespace, including newlines, so a multi-line block works (no quoting support). Relative paths resolve against the working directory. Layout is PyInstaller''s default (onedir) unless you pass --onefile. Example: "--paths src --collect-all numpy --hidden-import pandas._libs.pandas_parser --exclude-module pytest".'
+    required: false
+    default: ''
+  output-dir:
+    description: 'Directory the bundle is written to. It is DELETED before each build, so it must be a relative subdirectory of the workspace that holds nothing else you need (no "", ".", "..", absolute paths). PyInstaller scratch files go to the runner temp directory. Example: "build", "dist/exe".'
+    required: false
+    default: 'build'
+  smoke-test:
+    description: 'Bash command run after the build to prove the executable starts. The built exe path is available as "$EXECUTABLE". It is executed as shell code (eval), so never put untrusted values such as github.head_ref or PR titles in it. Empty skips it. Example: ''"$EXECUTABLE" --version''.'
+    required: false
+    default: ''
+  zip:
+    description: 'Whether to zip the bundle. Example: "true", "false".'
+    required: false
+    default: 'true'
+  zip-name:
+    description: 'Zip file name (written next to output-dir, not inside it). Empty means "<name>-windows.zip". Example: "singlerunner-1.2.0-windows.zip".'
+    required: false
+    default: ''
+  upload-artifact:
+    description: 'Whether to upload the zip (or the bundle folder when zip is "false") as a workflow artifact. Example: "true", "false".'
+    required: false
+    default: 'true'
+  artifact-name:
+    description: 'Workflow artifact name. Empty means "<name>-exe". Artifact names cannot contain "/". Example: "singlerunner-exe-main".'
+    required: false
+    default: ''
+  retention-days:
+    description: 'Days the uploaded artifact is kept. Example: "10", "90".'
+    required: false
+    default: '10'
+
+outputs:
+  executable-path:
+    description: 'Absolute path to the built .exe, with forward slashes (for example D:/a/repo/repo/build/app/app.exe).'
+    value: ${{ steps.locate.outputs.executable-path }}
+  bundle-dir:
+    description: 'Absolute path to the onedir bundle folder, with forward slashes. Empty for onefile builds.'
+    value: ${{ steps.locate.outputs.bundle-dir }}
+  zip-path:
+    description: 'Absolute path to the zip, with forward slashes. Empty when zip is "false".'
+    value: ${{ steps.zip.outputs.zip-path }}
+  artifact-name:
+    description: 'Name of the uploaded workflow artifact. Empty when upload-artifact is "false".'
+    value: ${{ steps.names.outputs.artifact-name }}
+  validation-error:
+    description: 'Why the action refused its inputs. Empty when the inputs were accepted. Lets a caller running with continue-on-error check the reason, not just that it failed.'
+    value: ${{ steps.validate.outputs.validation-error }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Validate inputs
+      id: validate
+      shell: bash
+      env:
+        RUNNER_OS_NAME: ${{ runner.os }}
+        PACKAGE_MANAGER: ${{ inputs.package-manager }}
+        NAME: ${{ inputs.name }}
+        ENTRY_POINT: ${{ inputs.entry-point }}
+        SPEC_FILE: ${{ inputs.spec-file }}
+        OUTPUT_DIR: ${{ inputs.output-dir }}
+      run: |
+        fail() {
+          echo "validation-error=$1" >> "$GITHUB_OUTPUT"
+          echo "::error::$1"
+          exit 1
+        }
+
+        if [[ "$RUNNER_OS_NAME" != "Windows" ]]; then
+          fail "executable/pyinstaller builds Windows executables and PyInstaller cannot cross-compile; run on a windows-latest runner (got $RUNNER_OS_NAME)"
+        fi
+        case "$PACKAGE_MANAGER" in
+          uv|poetry|pixi) ;;
+          *) fail "package-manager must be one of uv, poetry, pixi (got '$PACKAGE_MANAGER')" ;;
+        esac
+        if [[ -z "$NAME" ]]; then
+          fail "name is required"
+        fi
+        if [[ -z "$ENTRY_POINT" && -z "$SPEC_FILE" ]]; then
+          fail "Set either entry-point or spec-file"
+        fi
+        # entry-point mode makes PyInstaller write "<name>.spec" into the
+        # working directory, silently replacing one the repo already tracks.
+        if [[ -z "$SPEC_FILE" && -e "$NAME.spec" ]]; then
+          fail "$NAME.spec already exists and would be overwritten; pass it as spec-file, or choose a different name"
+        fi
+
+        # output-dir is deleted before every build, so it must be a plain
+        # relative path strictly inside the workspace: not empty, not the
+        # workspace itself, not absolute, no ".." segments.
+        if [[ "$OUTPUT_DIR" == /* || "$OUTPUT_DIR" == *\\* || "$OUTPUT_DIR" =~ ^[A-Za-z]: ]]; then
+          fail "output-dir must be a relative path inside the workspace with forward slashes (got '$OUTPUT_DIR')"
+        fi
+        has_real_segment=false
+        IFS='/' read -r -a segments <<< "$OUTPUT_DIR"
+        for segment in "${segments[@]}"; do
+          if [[ "$segment" == ".." ]]; then
+            fail "output-dir must not contain '..' (got '$OUTPUT_DIR')"
+          fi
+          if [[ -n "$segment" && "$segment" != "." ]]; then has_real_segment=true; fi
+        done
+        if [[ "$has_real_segment" != true ]]; then
+          fail "output-dir must name a subdirectory; it is deleted before each build (got '$OUTPUT_DIR')"
+        fi
+
+    # Python environment setup — delegated to actions/python-setup/<pm>
+    - name: Setup Python with uv
+      if: inputs.package-manager == 'uv'
+      uses: Deltares-research/github-actions/actions/python-setup/uv@35542e0d629396ac64162d8a5df6110484009147 # uv/v1.1.1
+      with:
+        python-version: ${{ inputs.python-version }}
+        version: ${{ inputs.version }}
+        install-groups: ${{ inputs.install-groups }}
+        verify-lock: ${{ inputs.verify-lock }}
+
+    - name: Setup Python with Poetry
+      if: inputs.package-manager == 'poetry'
+      uses: Deltares-research/github-actions/actions/python-setup/poetry@35542e0d629396ac64162d8a5df6110484009147 # poetry/v1.1.2
+      with:
+        python-version: ${{ inputs.python-version }}
+        version: ${{ inputs.version }}
+        install-groups: ${{ inputs.install-groups }}
+        verify-lock: ${{ inputs.verify-lock }}
+
+    - name: Setup Python with Pixi
+      if: inputs.package-manager == 'pixi'
+      uses: Deltares-research/github-actions/actions/python-setup/pixi@35542e0d629396ac64162d8a5df6110484009147 # pixi/v1.1.1
+      with:
+        version: ${{ inputs.version }}
+        environments: ${{ inputs.pixi-environments }}
+        activate-environment: ${{ inputs.pixi-activate-environment }}
+        verify-lock: ${{ inputs.verify-lock }}
+
+    - name: Resolve names
+      id: names
+      shell: bash
+      env:
+        NAME: ${{ inputs.name }}
+        ZIP_NAME: ${{ inputs.zip-name }}
+        ARTIFACT_NAME: ${{ inputs.artifact-name }}
+        UPLOAD: ${{ inputs.upload-artifact }}
+      run: |
+        echo "zip-name=${ZIP_NAME:-$NAME-windows.zip}" >> "$GITHUB_OUTPUT"
+        if [[ "$UPLOAD" == "true" ]]; then
+          echo "artifact-name=${ARTIFACT_NAME:-$NAME-exe}" >> "$GITHUB_OUTPUT"
+        else
+          echo "artifact-name=" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Build executable
+      shell: bash
+      env:
+        PACKAGE_MANAGER: ${{ inputs.package-manager }}
+        PIXI_ENV: ${{ inputs.pixi-activate-environment }}
+        NAME: ${{ inputs.name }}
+        ENTRY_POINT: ${{ inputs.entry-point }}
+        SPEC_FILE: ${{ inputs.spec-file }}
+        EXTRA_ARGS: ${{ inputs.extra-args }}
+        OUTPUT_DIR: ${{ inputs.output-dir }}
+      run: |
+        echo "::group::Preparing PyInstaller command"
+        case "$PACKAGE_MANAGER" in
+          # --frozen: never re-lock or re-resolve, even with verify-lock=false.
+          uv)     runner=(uv run --frozen) ;;
+          poetry) runner=(poetry run) ;;
+          pixi)
+            if [[ -n "$PIXI_ENV" ]]; then runner=(pixi run -e "$PIXI_ENV"); else runner=(pixi run); fi
+            ;;
+        esac
+
+        # Work files stay out of output-dir so the zip/artifact contains only
+        # the bundle.
+        scratch="$RUNNER_TEMP/pyinstaller-$NAME"
+        rm -rf "$OUTPUT_DIR" "$scratch"
+
+        args=(--noconfirm --clean --distpath "$OUTPUT_DIR" --workpath "$scratch/work")
+
+        if [[ -n "$SPEC_FILE" ]]; then
+          echo "Using spec file: $SPEC_FILE (entry-point and extra-args ignored)"
+          args+=("$SPEC_FILE")
+        else
+          # PyInstaller resolves relative --add-data/--icon paths against the
+          # spec's folder, so the generated spec must live in the working
+          # directory (default --specpath) for those paths to mean what the
+          # caller expects. Validation guarantees none exists yet, so it is safe
+          # to remove the generated one afterwards.
+          generated_spec="$NAME.spec"
+          trap 'rm -f "$generated_spec"' EXIT
+          args+=(--name "$NAME")
+
+          if [[ -n "$EXTRA_ARGS" ]]; then
+            # Unquoted expansion splits on spaces, tabs and newlines, so a YAML
+            # block scalar works. Globbing is off so "*" stays literal.
+            set -f
+            # shellcheck disable=SC2206
+            extra=($EXTRA_ARGS)
+            set +f
+            args+=("${extra[@]}")
+          fi
+          args+=("$ENTRY_POINT")
+        fi
+
+        echo "Running: ${runner[*]} pyinstaller ${args[*]}"
+        echo "::endgroup::"
+
+        echo "::group::Building with PyInstaller"
+        "${runner[@]}" pyinstaller "${args[@]}"
+        echo "::endgroup::"
+
+    - name: Locate executable
+      id: locate
+      shell: bash
+      env:
+        NAME: ${{ inputs.name }}
+        OUTPUT_DIR: ${{ inputs.output-dir }}
+      run: |
+        # Detect the layout from what PyInstaller produced, so a spec file
+        # (which decides onedir/onefile itself) works the same as the flags.
+        # Outputs are absolute with forward slashes (cygpath -m) so they stay
+        # valid when a later step changes directory or uses a different shell.
+        if [[ -f "$OUTPUT_DIR/$NAME/$NAME.exe" ]]; then
+          echo "bundle-dir=$(cygpath -ma "$OUTPUT_DIR/$NAME")" >> "$GITHUB_OUTPUT"
+          echo "executable-path=$(cygpath -ma "$OUTPUT_DIR/$NAME/$NAME.exe")" >> "$GITHUB_OUTPUT"
+        elif [[ -f "$OUTPUT_DIR/$NAME.exe" ]]; then
+          echo "bundle-dir=" >> "$GITHUB_OUTPUT"
+          echo "executable-path=$(cygpath -ma "$OUTPUT_DIR/$NAME.exe")" >> "$GITHUB_OUTPUT"
+        else
+          echo "::error::PyInstaller finished but neither $OUTPUT_DIR/$NAME/$NAME.exe nor $OUTPUT_DIR/$NAME.exe exists (does 'name' match the spec?)"
+          ls -R "$OUTPUT_DIR" || true
+          exit 1
+        fi
+
+    - name: Smoke test executable
+      if: inputs.smoke-test != ''
+      shell: bash
+      env:
+        EXECUTABLE: ${{ steps.locate.outputs.executable-path }}
+        SMOKE_TEST: ${{ inputs.smoke-test }}
+      run: |
+        echo "::group::Smoke test"
+        echo "Running: $SMOKE_TEST"
+        eval "$SMOKE_TEST"
+        echo "::endgroup::"
+
+    - name: Zip bundle
+      id: zip
+      if: inputs.zip == 'true'
+      shell: pwsh
+      env:
+        BUNDLE_DIR: ${{ steps.locate.outputs.bundle-dir }}
+        EXECUTABLE: ${{ steps.locate.outputs.executable-path }}
+        ZIP_NAME: ${{ steps.names.outputs.zip-name }}
+        OUTPUT_DIR: ${{ inputs.output-dir }}
+      run: |
+        # Zip next to output-dir (not inside it) so it is never packed into itself.
+        $zipPath = Join-Path (Split-Path -Parent (Resolve-Path $env:OUTPUT_DIR)) $env:ZIP_NAME
+        if (Test-Path $zipPath) { Remove-Item $zipPath }
+        if ($env:BUNDLE_DIR) { $source = Join-Path $env:BUNDLE_DIR '*' } else { $source = $env:EXECUTABLE }
+        Compress-Archive -Path $source -DestinationPath $zipPath
+        "zip-path=$($zipPath -replace '\\', '/')" >> $env:GITHUB_OUTPUT
+
+    - name: Upload executable as artifact
+      if: inputs.upload-artifact == 'true'
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      with:
+        name: ${{ steps.names.outputs.artifact-name }}
+        path: ${{ steps.zip.outputs.zip-path || steps.locate.outputs.bundle-dir || steps.locate.outputs.executable-path }}
+        retention-days: ${{ inputs.retention-days }}
+        if-no-files-found: error
