@@ -26,8 +26,8 @@ inputs:
     description: 'Package manager to set up Python with. Example: "uv", "poetry", "pixi".'
     required: false
     default: 'uv'
-    description: 'Version of the selected package manager to install (forwarded to the matching python-setup/<pm> action). Empty or omitted falls back to that action''s pinned default. Example: uv "0.13.6", poetry "2.5.1", pixi "v0.83.0".'
   version:
+    description: 'Version of the selected package manager to install (forwarded to the matching python-setup/<pm> action). Empty or omitted falls back to that action''s pinned default. Example: uv "0.13.6", poetry "2.5.1", pixi "v0.83.0".'
     required: false
     default: ''
   install-groups:
@@ -58,7 +58,7 @@ inputs:
     required: false
     default: ''
   extra-args:
-    description: 'PyInstaller arguments, appended verbatim and split on whitespace (no quoting support). Relative paths resolve against the working directory. Layout is PyInstaller''s default (onedir) unless you pass --onefile. Example: "--paths src --collect-all numpy --hidden-import pandas._libs.pandas_parser --exclude-module pytest".'
+    description: 'PyInstaller arguments, appended verbatim and split on whitespace, including newlines, so a multi-line block works (no quoting support). Relative paths resolve against the working directory. Layout is PyInstaller''s default (onedir) unless you pass --onefile. Example: "--paths src --collect-all numpy --hidden-import pandas._libs.pandas_parser --exclude-module pytest".'
     required: false
     default: ''
   output-dir:
@@ -217,7 +217,12 @@ runs:
           args+=(--name "$NAME")
 
           if [[ -n "$EXTRA_ARGS" ]]; then
-            read -r -a extra <<< "$EXTRA_ARGS"
+            # Unquoted expansion splits on spaces, tabs and newlines, so a YAML
+            # block scalar works. Globbing is off so "*" stays literal.
+            set -f
+            # shellcheck disable=SC2206
+            extra=($EXTRA_ARGS)
+            set +f
             args+=("${extra[@]}")
           fi
           args+=("$ENTRY_POINT")

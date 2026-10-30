@@ -33,7 +33,7 @@ For anything non-trivial, commit a `.spec` file and pass `spec-file: app.spec` i
 
 ## Notes
 
-- `extra-args` is split on whitespace with no quote handling. Relative paths in it resolve against the working
+- `extra-args` is split on whitespace (newlines included, so a `|` block works) with no quote handling. Relative paths in it resolve against the working
   directory. PyInstaller's default layout is onedir; pass `--onefile` for a single exe.
 - The layout is detected from the build output: onedir gives `<output-dir>/<name>/` and sets `bundle-dir`, onefile
   gives `<output-dir>/<name>.exe` and leaves `bundle-dir` empty. A spec file works the same way.

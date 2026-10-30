@@ -84,7 +84,7 @@ jobs:
           [[ -f downloaded/hello-windows.zip ]] || { echo "::error::expected downloaded/hello-windows.zip"; exit 1; }
 
   uv-onefile:
-    name: uv onefile (no zip, no upload)
+    name: uv onefile (multi-line extra-args, no zip, no upload)
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -103,12 +103,17 @@ jobs:
           package-manager: uv
           name: hello
           entry-point: src/hello_app/cli.py
-          extra-args: --onefile --paths src --hidden-import hello_app.plugin --add-data src/hello_app/data;hello_app/data
+          # Multi-line on purpose: --hidden-import sits on a later line, so a
+          # parser that stops at the first line builds an exe that crashes.
+          extra-args: |
+            --onefile --paths src
+            --add-data src/hello_app/data;hello_app/data
+            --hidden-import hello_app.plugin
           output-dir: dist
           zip: 'false'
           upload-artifact: 'false'
 
-      - name: Verify single-file output
+      - name: Verify single-file output (also proves multi-line extra-args)
         shell: bash
         env:
           EXECUTABLE: ${{ steps.build.outputs.executable-path }}
