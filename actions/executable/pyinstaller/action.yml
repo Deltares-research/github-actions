@@ -103,11 +103,15 @@ outputs:
   artifact-name:
     description: 'Name of the uploaded workflow artifact. Empty when upload-artifact is "false".'
     value: ${{ steps.names.outputs.artifact-name }}
+  validation-error:
+    description: 'Why the action refused its inputs. Empty when the inputs were accepted. Lets a caller running with continue-on-error check the reason, not just that it failed.'
+    value: ${{ steps.validate.outputs.validation-error }}
 
 runs:
   using: 'composite'
   steps:
     - name: Validate inputs
+      id: validate
       shell: bash
       env:
         RUNNER_OS_NAME: ${{ runner.os }}
@@ -116,21 +120,24 @@ runs:
         ENTRY_POINT: ${{ inputs.entry-point }}
         SPEC_FILE: ${{ inputs.spec-file }}
       run: |
-        if [[ "$RUNNER_OS_NAME" != "Windows" ]]; then
-          echo "::error::executable/pyinstaller builds Windows executables and PyInstaller cannot cross-compile; run on a windows-latest runner (got $RUNNER_OS_NAME)"
+        fail() {
+          echo "validation-error=$1" >> "$GITHUB_OUTPUT"
+          echo "::error::$1"
           exit 1
+        }
+
+        if [[ "$RUNNER_OS_NAME" != "Windows" ]]; then
+          fail "executable/pyinstaller builds Windows executables and PyInstaller cannot cross-compile; run on a windows-latest runner (got $RUNNER_OS_NAME)"
         fi
         case "$PACKAGE_MANAGER" in
           uv|poetry|pixi) ;;
-          *) echo "::error::package-manager must be one of uv, poetry, pixi (got '$PACKAGE_MANAGER')"; exit 1 ;;
+          *) fail "package-manager must be one of uv, poetry, pixi (got '$PACKAGE_MANAGER')" ;;
         esac
         if [[ -z "$NAME" ]]; then
-          echo "::error::name is required"
-          exit 1
+          fail "name is required"
         fi
         if [[ -z "$ENTRY_POINT" && -z "$SPEC_FILE" ]]; then
-          echo "::error::Set either entry-point or spec-file"
-          exit 1
+          fail "Set either entry-point or spec-file"
         fi
 
     # Python environment setup — delegated to actions/python-setup/<pm>

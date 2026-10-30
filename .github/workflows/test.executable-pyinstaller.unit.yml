@@ -218,14 +218,17 @@ jobs:
           name: hello
           entry-point: src/hello_app/cli.py
 
-      - name: Assert action failed
+      # The outcome alone would also be "failure" if the action could not load
+      # at all, so assert the validation step gave the expected reason.
+      - name: Assert action failed for the right reason
         shell: bash
+        env:
+          OUTCOME: ${{ steps.run.outcome }}
+          REASON: ${{ steps.run.outputs.validation-error }}
         run: |
-          if [ "${{ steps.run.outcome }}" != "failure" ]; then
-            echo "::error::Expected action to fail on ubuntu, but outcome was ${{ steps.run.outcome }}"
-            exit 1
-          fi
-          echo "Action correctly refused a non-Windows runner"
+          [[ "$OUTCOME" == "failure" ]] || { echo "::error::Expected failure on ubuntu, outcome was $OUTCOME"; exit 1; }
+          [[ "$REASON" == *"cannot cross-compile"* ]] || { echo "::error::Unexpected reason: '$REASON'"; exit 1; }
+          echo "Action correctly refused a non-Windows runner: $REASON"
 
   fails-without-entry-point:
     name: fails when neither entry-point nor spec-file is set
@@ -240,11 +243,12 @@ jobs:
         with:
           name: hello
 
-      - name: Assert action failed
+      - name: Assert action failed for the right reason
         shell: bash
+        env:
+          OUTCOME: ${{ steps.run.outcome }}
+          REASON: ${{ steps.run.outputs.validation-error }}
         run: |
-          if [ "${{ steps.run.outcome }}" != "failure" ]; then
-            echo "::error::Expected action to fail without entry-point/spec-file, but outcome was ${{ steps.run.outcome }}"
-            exit 1
-          fi
+          [[ "$OUTCOME" == "failure" ]] || { echo "::error::Expected failure without entry-point/spec-file, outcome was $OUTCOME"; exit 1; }
+          [[ "$REASON" == "Set either entry-point or spec-file" ]] || { echo "::error::Unexpected reason: '$REASON'"; exit 1; }
           echo "Action correctly required entry-point or spec-file"
