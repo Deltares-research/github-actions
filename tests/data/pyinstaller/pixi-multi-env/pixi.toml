@@ -1,0 +1,15 @@
+[workspace]
+name = "test-pyinstaller-pixi-multi-env"
+version = "0.1.0"
+description = "Fixture for executable/pyinstaller: pixi with pyinstaller only in the 'build' environment"
+channels = ["conda-forge"]
+platforms = ["win-64"]
+
+[dependencies]
+python = "3.12.*"
+
+[feature.build.pypi-dependencies]
+pyinstaller = ">=6.22.3"
+
+[environments]
+build = ["build"]

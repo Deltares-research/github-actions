@@ -204,6 +204,34 @@ jobs:
           upload-artifact: 'false'
           smoke-test: '"$EXECUTABLE" | grep -q "plugin: dynamic-plugin"'
 
+  pixi-multi-env:
+    name: pixi onedir in a non-default environment
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # pyinstaller exists only in the "build" environment, so the build can
+      # only succeed if pixi-environments installs it and
+      # pixi-activate-environment makes `pixi run -e build` select it.
+      - name: Stage fixture
+        shell: bash
+        run: |
+          cp tests/data/pyinstaller/pixi-multi-env/pixi.toml ./pixi.toml
+          cp tests/data/pyinstaller/pixi-multi-env/pixi.lock ./pixi.lock
+          cp -r tests/data/pyinstaller/app/src ./src
+
+      - name: Run action
+        uses: ./actions/executable/pyinstaller
+        with:
+          package-manager: pixi
+          pixi-environments: build
+          pixi-activate-environment: build
+          name: hello
+          entry-point: src/hello_app/cli.py
+          extra-args: --paths src --hidden-import hello_app.plugin --add-data src/hello_app/data;hello_app/data
+          upload-artifact: 'false'
+          smoke-test: '"$EXECUTABLE" | grep -q "plugin: dynamic-plugin"'
+
   fails-on-non-windows:
     name: fails fast on a non-Windows runner
     runs-on: ubuntu-latest
