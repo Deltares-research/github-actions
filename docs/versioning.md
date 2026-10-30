@@ -52,15 +52,16 @@ tag.
 
 **Namespace registry — keep this table the source of truth:**
 
-| Action directory               | Namespace        | Examples                                        |
-|--------------------------------|------------------|-------------------------------------------------|
-| `actions/python-setup/pip`     | `pip`            | `pip/v1.0.0`, `pip/v1.0.1`                       |
-| `actions/python-setup/uv`      | `uv`             | `uv/v1.0.0`, `uv/v1.1.0`                         |
-| `actions/python-setup/poetry`  | `poetry`         | `poetry/v1.1.0`, `poetry/v1.1.1`                 |
-| `actions/python-setup/pixi`    | `pixi`           | `pixi/v1.0.0`, `pixi/v1.1.0`                     |
-| `actions/mkdocs-deploy`        | `mkdocs-deploy`  | `mkdocs-deploy/v1.0.0`, `mkdocs-deploy/v1.1.0`   |
-| `actions/release/github`       | `github-release` | `github-release/v1.1.4`, `github-release/v1.2.0` |
-| `actions/release/latex-manual` | `latex`          | `latex/v1.0.0`, `latex/v1.1.0`                   |
+| Action directory                 | Namespace        | Examples                                         |
+|----------------------------------|------------------|--------------------------------------------------|
+| `actions/python-setup/pip`       | `pip`            | `pip/v1.0.0`, `pip/v1.0.1`                       |
+| `actions/python-setup/uv`        | `uv`             | `uv/v1.0.0`, `uv/v1.1.0`                         |
+| `actions/python-setup/poetry`    | `poetry`         | `poetry/v1.1.0`, `poetry/v1.1.1`                 |
+| `actions/python-setup/pixi`      | `pixi`           | `pixi/v1.0.0`, `pixi/v1.1.0`                     |
+| `actions/mkdocs-deploy`          | `mkdocs-deploy`  | `mkdocs-deploy/v1.0.0`, `mkdocs-deploy/v1.1.0`   |
+| `actions/executable/pyinstaller` | `pyinstaller`    | `pyinstaller/v1.0.0`, `pyinstaller/v1.1.0`       |
+| `actions/release/github`         | `github-release` | `github-release/v1.1.4`, `github-release/v1.2.0` |
+| `actions/release/latex-manual`   | `latex`          | `latex/v1.0.0`, `latex/v1.1.0`                   |
 
 Pick a namespace per action and stick with it — consumers will reference it forever. If you add a new action,
 append a row here before cutting its first tag.

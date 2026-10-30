@@ -70,15 +70,16 @@ steps:
 
 ### Namespace registry
 
-| Action                         | Namespace        |
-|--------------------------------|------------------|
-| `actions/python-setup/pip`     | `pip`            |
-| `actions/python-setup/uv`      | `uv`             |
-| `actions/python-setup/poetry`  | `poetry`         |
-| `actions/python-setup/pixi`    | `pixi`           |
-| `actions/mkdocs-deploy`        | `mkdocs-deploy`  |
-| `actions/release/github`       | `github-release` |
-| `actions/release/latex-manual` | `latex`          |
+| Action                           | Namespace        |
+|----------------------------------|------------------|
+| `actions/python-setup/pip`       | `pip`            |
+| `actions/python-setup/uv`        | `uv`             |
+| `actions/python-setup/poetry`    | `poetry`         |
+| `actions/python-setup/pixi`      | `pixi`           |
+| `actions/mkdocs-deploy`          | `mkdocs-deploy`  |
+| `actions/executable/pyinstaller` | `pyinstaller`    |
+| `actions/release/github`         | `github-release` |
+| `actions/release/latex-manual`   | `latex`          |
 
 ### Latest releases
 
