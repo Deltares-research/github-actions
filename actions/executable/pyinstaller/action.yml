@@ -221,7 +221,8 @@ runs:
       run: |
         echo "::group::Preparing PyInstaller command"
         case "$PACKAGE_MANAGER" in
-          uv)     runner=(uv run) ;;
+          # --frozen: never re-lock or re-resolve, even with verify-lock=false.
+          uv)     runner=(uv run --frozen) ;;
           poetry) runner=(poetry run) ;;
           pixi)
             if [[ -n "$PIXI_ENV" ]]; then runner=(pixi run -e "$PIXI_ENV"); else runner=(pixi run); fi
