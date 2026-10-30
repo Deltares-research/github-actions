@@ -140,6 +140,11 @@ runs:
         if [[ -z "$ENTRY_POINT" && -z "$SPEC_FILE" ]]; then
           fail "Set either entry-point or spec-file"
         fi
+        # entry-point mode makes PyInstaller write "<name>.spec" into the
+        # working directory, silently replacing one the repo already tracks.
+        if [[ -z "$SPEC_FILE" && -e "$NAME.spec" ]]; then
+          fail "$NAME.spec already exists and would be overwritten; pass it as spec-file, or choose a different name"
+        fi
 
         # output-dir is deleted before every build, so it must be a plain
         # relative path strictly inside the workspace: not empty, not the
@@ -237,9 +242,10 @@ runs:
           # PyInstaller resolves relative --add-data/--icon paths against the
           # spec's folder, so the generated spec must live in the working
           # directory (default --specpath) for those paths to mean what the
-          # caller expects. Remove it afterwards unless the repo already has one.
+          # caller expects. Validation guarantees none exists yet, so it is safe
+          # to remove the generated one afterwards.
           generated_spec="$NAME.spec"
-          if [[ ! -e "$generated_spec" ]]; then trap 'rm -f "$generated_spec"' EXIT; fi
+          trap 'rm -f "$generated_spec"' EXIT
           args+=(--name "$NAME")
 
           if [[ -n "$EXTRA_ARGS" ]]; then

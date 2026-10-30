@@ -309,3 +309,35 @@ jobs:
           [[ "$ABSOLUTE" == *"must be a relative path"* ]] || { echo "::error::absolute: '$ABSOLUTE'"; exit 1; }
           [[ -f sentinel.txt && -d tests ]] || { echo "::error::workspace content was deleted"; exit 1; }
           echo "All unsafe output-dir values were refused"
+
+  fails-when-spec-would-be-overwritten:
+    name: refuses to overwrite an existing <name>.spec
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Stage a tracked spec
+        shell: bash
+        run: |
+          cp tests/data/pyinstaller/spec/hello.spec ./hello.spec
+          cp -r tests/data/pyinstaller/app/src ./src
+          sha256sum hello.spec > spec.sha256
+
+      - name: Run action (expected to refuse)
+        id: run
+        continue-on-error: true
+        uses: ./actions/executable/pyinstaller
+        with:
+          name: hello
+          entry-point: src/hello_app/cli.py
+
+      - name: Assert refusal and that the spec is untouched
+        shell: bash
+        env:
+          OUTCOME: ${{ steps.run.outcome }}
+          REASON: ${{ steps.run.outputs.validation-error }}
+        run: |
+          [[ "$OUTCOME" == "failure" ]] || { echo "::error::Expected failure, outcome was $OUTCOME"; exit 1; }
+          [[ "$REASON" == *"hello.spec already exists"* ]] || { echo "::error::Unexpected reason: '$REASON'"; exit 1; }
+          sha256sum -c spec.sha256
+
